@@ -1,36 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FPL Assistant
 
-## Getting Started
+Fantasy Premier League chat assistant built with the [assistant-ui](https://www.assistant-ui.com/) minimal template, powered by Kimi (Moonshot), and grounded in the public FPL API.
 
-First, run the development server:
+## Features
+
+- Manager ID input with persisted profile snapshot
+- Live FPL tools: general info, fixtures, gameweek live, manager profile/history/squad, classic leagues, player detail
+- Deterministic captain / transfer / watchlist suggestions from form, xGI, and fixture difficulty
+- Minimal assistant-ui Thread chat UI with streaming responses
+
+## Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
+cp .env.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Add your Moonshot API key:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+MOONSHOT_API_KEY=your_key_here
+# optional
+KIMI_MODEL=kimi-k3
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+pnpm dev
+```
 
-## Learn More
+Open [http://localhost:3000](http://localhost:3000), enter your FPL Manager ID, and ask for squad, captain, or transfer advice.
 
-To learn more about Next.js, take a look at the following resources:
+## Scripts
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `pnpm dev` — development server
+- `pnpm build` — production build
+- `pnpm lint` — ESLint
+- `pnpm test` — Vitest unit tests
+- `pnpm typecheck` — TypeScript check
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Finding your Manager ID
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Sign in at fantasy.premierleague.com → Points / Gameweek history. Your Manager ID is the number in the URL before `/history`.

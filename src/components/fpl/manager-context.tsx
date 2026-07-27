@@ -181,7 +181,7 @@ export function ManagerProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function ManagerIdBar() {
+export function ManagerIdBar({ authSlot }: { authSlot?: ReactNode }) {
   const {
     managerId,
     snapshot,
@@ -213,47 +213,50 @@ export function ManagerIdBar() {
           )}
         </div>
 
-        <form
-          className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const form = new FormData(e.currentTarget);
-            const value = String(form.get("managerId") ?? "");
-            void setManagerId(value);
-          }}
-        >
-          <label className="sr-only" htmlFor="manager-id">
-            Manager ID
-          </label>
-          <input
-            id="manager-id"
-            name="managerId"
-            key={managerId ?? "empty"}
-            inputMode="numeric"
-            pattern="[0-9]*"
-            placeholder="Manager ID"
-            defaultValue={managerId ?? ""}
-            className="border-input bg-background text-foreground focus:border-ring h-9 w-full rounded-lg border px-3 text-sm outline-none sm:w-44"
-          />
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={loading}
-              className="bg-primary text-primary-foreground hover:bg-primary/80 h-9 rounded-lg px-3 text-sm font-medium transition disabled:opacity-60"
-            >
-              {loading ? "Loading…" : snapshot ? "Update" : "Connect"}
-            </button>
-            {snapshot ? (
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <form
+            className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const form = new FormData(e.currentTarget);
+              const value = String(form.get("managerId") ?? "");
+              void setManagerId(value);
+            }}
+          >
+            <label className="sr-only" htmlFor="manager-id">
+              Manager ID
+            </label>
+            <input
+              id="manager-id"
+              name="managerId"
+              key={managerId ?? "empty"}
+              inputMode="numeric"
+              pattern="[0-9]*"
+              placeholder="Manager ID"
+              defaultValue={managerId ?? ""}
+              className="border-input bg-background text-foreground focus:border-ring h-9 w-full rounded-lg border px-3 text-sm outline-none sm:w-44"
+            />
+            <div className="flex gap-2">
               <button
-                type="button"
-                onClick={clearManager}
-                className="border-border text-foreground hover:bg-muted h-9 rounded-lg border px-3 text-sm transition"
+                type="submit"
+                disabled={loading}
+                className="bg-primary text-primary-foreground hover:bg-primary/80 h-9 rounded-lg px-3 text-sm font-medium transition disabled:opacity-60"
               >
-                Clear
+                {loading ? "Loading…" : snapshot ? "Update" : "Connect"}
               </button>
-            ) : null}
-          </div>
-        </form>
+              {snapshot ? (
+                <button
+                  type="button"
+                  onClick={clearManager}
+                  className="border-border text-foreground hover:bg-muted h-9 rounded-lg border px-3 text-sm transition"
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          </form>
+          {authSlot}
+        </div>
       </div>
       {error ? (
         <p className="text-destructive mx-auto mt-2 max-w-5xl text-sm">

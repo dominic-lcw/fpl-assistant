@@ -19,7 +19,7 @@ type ManagerSnapshot = {
   managerName: string;
   teamName: string;
   overallPoints: number;
-  overallRank: number;
+  overallRank: number | null;
   eventPoints: number;
   currentEvent: number | null;
   favouriteTeam: string | null;
@@ -148,7 +148,9 @@ export function ManagerProvider({ children }: { children: ReactNode }) {
         `Manager name: ${snapshot.managerName}`,
         `Team name: ${snapshot.teamName}`,
         `Overall points: ${snapshot.overallPoints}`,
-        `Overall rank: ${snapshot.overallRank}`,
+        snapshot.overallRank != null
+          ? `Overall rank: ${snapshot.overallRank}`
+          : "Overall rank: unavailable",
         gameweek
           ? `Relevant gameweek: ${gameweek.name} (${gameweek.kind}, id ${gameweek.id})`
           : null,
@@ -200,7 +202,9 @@ export function ManagerIdBar() {
             <div className="text-muted-foreground truncate text-sm">
               {snapshot.managerName} · {snapshot.teamName}
               {gameweek ? ` · ${gameweek.name}` : ""}
-              {` · rank ${snapshot.overallRank.toLocaleString()}`}
+              {snapshot.overallRank != null
+                ? ` · rank ${snapshot.overallRank.toLocaleString()}`
+                : ""}
             </div>
           ) : (
             <div className="text-muted-foreground text-sm">

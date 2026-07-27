@@ -130,7 +130,7 @@ export interface ManagerEntry {
   player_last_name: string;
   name: string;
   summary_overall_points: number;
-  summary_overall_rank: number;
+  summary_overall_rank: number | null;
   summary_event_points: number;
   summary_event_rank: number | null;
   current_event: number | null;

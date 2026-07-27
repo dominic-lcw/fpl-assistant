@@ -60,6 +60,8 @@ Sign in at fantasy.premierleague.com → Points / Gameweek history. Your Manager
 
 ## Deploy to Google Cloud Run
 
+Full from-scratch walkthrough (secrets, local `linux/amd64` build, push, `AUTH_URL`, OAuth): see **[DEPLOY.md](DEPLOY.md)**.
+
 The app is a stateless Next.js container (`Dockerfile` + `output: "standalone"`). Use **min instances = 0** and **request-based billing** so personal use usually stays within Cloud Run’s free tier. Your Moonshot API usage is the main ongoing cost.
 
 ### 1. One-time GCP setup

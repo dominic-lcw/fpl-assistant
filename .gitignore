@@ -46,3 +46,7 @@ next-env.d.ts
 # agent / editor
 .agents
 .cursor
+.vscode/
+
+# local follow-ups (not committed)
+/todos/

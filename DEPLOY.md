@@ -13,7 +13,8 @@ The app is a Next.js standalone container (`Dockerfile` + `output: "standalone"`
   - `MOONSHOT_API_KEY`
   - `AUTH_SECRET` — `openssl rand -base64 32`
   - `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` — Google OAuth Web client
-  - `ALLOWED_EMAIL` — exact allowlisted Gmail
+  - `DATABASE_URL` — PostgreSQL connection URL
+  - `ADMIN_EMAILS` — comma-separated bootstrap administrator emails
 
 ## Variables used in this project
 
@@ -35,6 +36,7 @@ Use another project/region if needed; keep `REGION` consistent for Artifact Regi
 ```bash
 gcloud services enable \
   run.googleapis.com \
+  sqladmin.googleapis.com \
   artifactregistry.googleapis.com \
   secretmanager.googleapis.com \
   cloudbuild.googleapis.com
@@ -73,6 +75,7 @@ create_or_update_secret MOONSHOT_API_KEY "$(get_env MOONSHOT_API_KEY)"
 create_or_update_secret AUTH_SECRET "$(get_env AUTH_SECRET)"
 create_or_update_secret AUTH_GOOGLE_ID "$(get_env AUTH_GOOGLE_ID)"
 create_or_update_secret AUTH_GOOGLE_SECRET "$(get_env AUTH_GOOGLE_SECRET)"
+create_or_update_secret DATABASE_URL "$(get_env DATABASE_URL)"
 ```
 
 Grant the default Compute runtime service account access:
@@ -81,7 +84,7 @@ Grant the default Compute runtime service account access:
 PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
 RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 
-for SECRET in MOONSHOT_API_KEY AUTH_SECRET AUTH_GOOGLE_ID AUTH_GOOGLE_SECRET; do
+for SECRET in MOONSHOT_API_KEY AUTH_SECRET AUTH_GOOGLE_ID AUTH_GOOGLE_SECRET DATABASE_URL; do
   gcloud secrets add-iam-policy-binding "$SECRET" \
     --member="serviceAccount:${RUNTIME_SA}" \
     --role="roles/secretmanager.secretAccessor" \
@@ -89,9 +92,48 @@ for SECRET in MOONSHOT_API_KEY AUTH_SECRET AUTH_GOOGLE_ID AUTH_GOOGLE_SECRET; do
 done
 ```
 
-Non-secret config (`ALLOWED_EMAIL`, `KIMI_MODEL`, `AUTH_TRUST_HOST`, `AUTH_URL`) goes on the Cloud Run service as env vars, not secrets.
+Non-secret config (`ADMIN_EMAILS`, `KIMI_MODEL`, `AUTH_TRUST_HOST`, `AUTH_URL`) goes on the Cloud Run service as env vars, not secrets.
 
-## 4. Build locally and push
+## 4. Create Cloud SQL and migrate
+
+Create a single-zone PostgreSQL instance in the same region as Cloud Run. The
+following uses the smallest shared-core tier for personal/low-traffic usage;
+it is not highly available.
+
+```bash
+export DB_INSTANCE=fpl-assistant-db
+export DB_NAME=fpl_assistant
+export DB_USER=fpl_assistant
+
+gcloud sql instances create "$DB_INSTANCE" \
+  --database-version=POSTGRES_16 \
+  --tier=db-f1-micro \
+  --region="$REGION" \
+  --storage-size=10GB \
+  --storage-auto-increase \
+  --backup-start-time=03:00
+
+gcloud sql databases create "$DB_NAME" --instance="$DB_INSTANCE"
+gcloud sql users create "$DB_USER" --instance="$DB_INSTANCE" --password='CHOOSE_A_STRONG_PASSWORD'
+```
+
+Store a connection URL for the database user as `DATABASE_URL` in Secret
+Manager (use your organization’s approved Cloud SQL connector or pooler
+format). Run migrations from a trusted machine with that URL available:
+
+```bash
+pnpm db:migrate
+```
+
+The Cloud Run service account needs the Cloud SQL Client role:
+
+```bash
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:${RUNTIME_SA}" \
+  --role="roles/cloudsql.client"
+```
+
+## 5. Build locally and push
 
 Cloud Run needs **`linux/amd64`**. On Apple Silicon, always pass `--platform linux/amd64` or the revision will fail with a manifest/architecture error.
 
@@ -110,12 +152,12 @@ gcloud builds submit --tag "$IMAGE"
 
 If that returns `PERMISSION_DENIED`, use the local Docker path above (what worked for this project).
 
-## 5. Deploy to Cloud Run
+## 6. Deploy to Cloud Run
 
 First deploy (creates the service):
 
 ```bash
-ALLOWED_EMAIL=$(get_env ALLOWED_EMAIL)
+ADMIN_EMAILS=$(get_env ADMIN_EMAILS)
 KIMI_MODEL=$(get_env KIMI_MODEL)
 KIMI_MODEL=${KIMI_MODEL:-kimi-k3}
 
@@ -129,13 +171,14 @@ gcloud run deploy "$SERVICE" \
   --cpu=1 \
   --memory=1Gi \
   --timeout=60 \
-  --set-env-vars="AUTH_TRUST_HOST=true,ALLOWED_EMAIL=${ALLOWED_EMAIL},KIMI_MODEL=${KIMI_MODEL}" \
-  --set-secrets="MOONSHOT_API_KEY=MOONSHOT_API_KEY:latest,AUTH_SECRET=AUTH_SECRET:latest,AUTH_GOOGLE_ID=AUTH_GOOGLE_ID:latest,AUTH_GOOGLE_SECRET=AUTH_GOOGLE_SECRET:latest"
+  --add-cloudsql-instances="${PROJECT_ID}:${REGION}:${DB_INSTANCE}" \
+  --set-env-vars="AUTH_TRUST_HOST=true,ADMIN_EMAILS=${ADMIN_EMAILS},KIMI_MODEL=${KIMI_MODEL}" \
+  --set-secrets="MOONSHOT_API_KEY=MOONSHOT_API_KEY:latest,AUTH_SECRET=AUTH_SECRET:latest,AUTH_GOOGLE_ID=AUTH_GOOGLE_ID:latest,AUTH_GOOGLE_SECRET=AUTH_GOOGLE_SECRET:latest,DATABASE_URL=DATABASE_URL:latest"
 ```
 
 Notes:
 
-- `--allow-unauthenticated` = public HTTPS URL. Sign-in is still enforced by Auth.js + `ALLOWED_EMAIL`.
+- `--allow-unauthenticated` = public HTTPS URL. Sign-in is still enforced by Auth.js; new accounts remain pending until an administrator approves them.
 - `min-instances=0` = scale to zero when idle (request-based billing).
 
 Get the URL:
@@ -157,7 +200,7 @@ gcloud run services update "$SERVICE" \
   --update-env-vars="AUTH_URL=${RUN_URL},AUTH_TRUST_HOST=true"
 ```
 
-## 6. Google OAuth for production
+## 7. Google OAuth for production
 
 In [APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials) → your OAuth 2.0 Web client:
 
@@ -166,7 +209,7 @@ In [APIs & Services → Credentials](https://console.cloud.google.com/apis/crede
 
 Keep `http://localhost:3000` entries for local dev. Changes apply immediately (no redeploy).
 
-## 7. Redeploy after code changes
+## 8. Redeploy after code changes
 
 Preferred: merge to `main` and let GitHub Actions build/push/deploy (see [CI/CD](#8-cicd-github-actions--cloud-run) below).
 
@@ -276,7 +319,7 @@ curl -sI "$RUN_URL/signin" | head
 # Expect HTTP 200, cookies for authjs
 ```
 
-Open the URL, sign in with `ALLOWED_EMAIL`, enter an FPL manager ID, try a chat turn.
+Open the URL, sign in with an address in `ADMIN_EMAILS`, approve a requested account at `/admin`, enter an FPL manager ID, and try a chat turn.
 
 ## Current production pointers
 

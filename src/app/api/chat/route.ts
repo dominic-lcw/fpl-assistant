@@ -8,10 +8,14 @@ import {
   toUIMessageStream,
   type UIMessage,
 } from "ai";
+import { and, eq } from "drizzle-orm";
 
-import { resolveKimiModelId } from "@/lib/kimi/models";
+import { db } from "@/db";
+import { threads } from "@/db/schema";
 import { createFplTools } from "@/lib/fpl/tools";
+import { getApprovedUser } from "@/lib/access";
 import { managerIdSchema } from "@/lib/fpl/validation";
+import { resolveKimiModelId } from "@/lib/kimi/models";
 
 export const maxDuration = 60;
 
@@ -35,18 +39,36 @@ function extractManagerId(system?: string): number | undefined {
 }
 
 export async function POST(req: Request) {
+  const user = await getApprovedUser();
+  if (!user) {
+    return Response.json({ error: "Approved access is required." }, { status: 403 });
+  }
+
   const body = await req.json();
   const {
     messages,
     system,
     tools: frontendToolDefs,
     model,
+    id: threadId,
   }: {
     messages: UIMessage[];
     system?: string;
     tools?: Record<string, unknown>;
     model?: string;
+    id?: string;
   } = body;
+
+  if (threadId) {
+    const [thread] = await db
+      .select({ id: threads.id })
+      .from(threads)
+      .where(and(eq(threads.id, threadId), eq(threads.userId, user.id)))
+      .limit(1);
+    if (!thread) {
+      return Response.json({ error: "Thread not found." }, { status: 404 });
+    }
+  }
 
   if (!process.env.MOONSHOT_API_KEY) {
     return new Response(

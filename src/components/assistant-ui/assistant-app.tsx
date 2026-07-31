@@ -1,13 +1,18 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
-import { AssistantRuntimeProvider } from "@assistant-ui/react";
+import {
+  AssistantRuntimeProvider,
+  useRemoteThreadListRuntime,
+} from "@assistant-ui/react";
 import {
   AssistantChatTransport,
   useChatRuntime,
 } from "@assistant-ui/react-ai-sdk";
 import { lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { Thread } from "@/components/assistant-ui/thread";
+import { ThreadList } from "@/components/assistant-ui/thread-list";
+import { threadListAdapter } from "@/components/assistant-ui/thread-adapter";
 import {
   ModelProvider,
   useModelSelection,
@@ -17,7 +22,7 @@ import {
   ManagerProvider,
 } from "@/components/fpl/manager-context";
 
-function AssistantRuntimeShell({ authSlot }: { authSlot?: ReactNode }) {
+function useThreadRuntime() {
   const { modelId } = useModelSelection();
 
   const transport = useMemo(
@@ -29,19 +34,29 @@ function AssistantRuntimeShell({ authSlot }: { authSlot?: ReactNode }) {
     [modelId],
   );
 
-  const runtime = useChatRuntime({
+  return useChatRuntime({
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     transport,
+  });
+}
+
+function AssistantRuntimeShell({ authSlot }: { authSlot?: ReactNode }) {
+  const runtime = useRemoteThreadListRuntime({
+    adapter: threadListAdapter,
+    runtimeHook: useThreadRuntime,
   });
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ManagerProvider>
-        <div className="flex h-dvh flex-col overflow-hidden">
-          <ManagerIdBar authSlot={authSlot} />
-          <main className="min-h-0 flex-1">
-            <Thread />
-          </main>
+        <div className="flex h-dvh overflow-hidden">
+          <ThreadList />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <ManagerIdBar authSlot={authSlot} />
+            <main className="min-h-0 flex-1">
+              <Thread />
+            </main>
+          </div>
         </div>
       </ManagerProvider>
     </AssistantRuntimeProvider>

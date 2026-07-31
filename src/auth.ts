@@ -1,14 +1,26 @@
 import NextAuth from "next-auth";
+import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import Google from "next-auth/providers/google";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { accounts, sessions, users, verificationTokens } from "@/db/schema";
 
-function isAllowedEmail(email: string | null | undefined): boolean {
-  const allowed = process.env.ALLOWED_EMAIL?.trim().toLowerCase();
-  if (!allowed || !email) return false;
-  return email.trim().toLowerCase() === allowed;
-}
+const administratorEmails = new Set(
+  (process.env.ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean),
+);
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [Google],
+  adapter: DrizzleAdapter(db, {
+    usersTable: users,
+    accountsTable: accounts,
+    sessionsTable: sessions,
+    verificationTokensTable: verificationTokens,
+  }),
+  session: { strategy: "database" },
   trustHost: true,
   pages: {
     signIn: "/signin",
@@ -16,19 +28,42 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   callbacks: {
     async signIn({ user }) {
-      return isAllowedEmail(user.email);
-    },
-    authorized({ auth, request }) {
-      const { pathname } = request.nextUrl;
-      if (pathname.startsWith("/signin")) return true;
-      // Local/cloud preview without Google OAuth credentials.
-      if (
-        process.env.NODE_ENV === "development" &&
-        process.env.AUTH_BYPASS === "true"
-      ) {
-        return true;
+      if (!user.email) return false;
+
+      const email = user.email.trim().toLowerCase();
+      if (administratorEmails.has(email)) {
+        await db
+          .update(users)
+          .set({
+            role: "admin",
+            status: "approved",
+            approvedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, user.id!));
       }
-      return !!auth?.user;
+
+      return true;
+    },
+    async session({ session, user }) {
+      const [account] = await db
+        .select({
+          role: users.role,
+          status: users.status,
+        })
+        .from(users)
+        .where(eq(users.id, user.id))
+        .limit(1);
+
+      if (!account) return session;
+
+      session.user = {
+        ...session.user,
+        id: user.id,
+        role: account.role,
+        status: account.status,
+      };
+      return session;
     },
   },
 });

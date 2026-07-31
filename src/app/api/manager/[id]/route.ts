@@ -2,12 +2,20 @@ import { NextResponse } from "next/server";
 
 import { getRelevantGameweek, summarizeManagerSnapshot } from "@/lib/fpl/analysis";
 import { FplApiError, getBootstrapStatic, getManagerEntry } from "@/lib/fpl/client";
+import { getApprovedUser } from "@/lib/access";
 import { managerIdSchema } from "@/lib/fpl/validation";
 
 export async function GET(
   _req: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  if (!(await getApprovedUser())) {
+    return NextResponse.json(
+      { error: "Approved access is required." },
+      { status: 403 },
+    );
+  }
+
   const { id } = await context.params;
   const parsed = managerIdSchema.safeParse(id);
   if (!parsed.success) {

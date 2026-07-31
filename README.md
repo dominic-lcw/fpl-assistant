@@ -1,6 +1,6 @@
 # FPL Assistant
 
-Fantasy Premier League chat assistant built with the [assistant-ui](https://www.assistant-ui.com/) minimal template, powered by Kimi (Moonshot), and grounded in the public FPL API.
+Fantasy Premier League chat assistant built with the [assistant-ui](https://www.assistant-ui.com/) minimal template, powered by Gemini (Google AI Studio), and grounded in the public FPL API.
 
 ## Features
 
@@ -20,9 +20,9 @@ cp .env.example .env.local
 Fill in `.env.local`:
 
 ```
-MOONSHOT_API_KEY=your_key_here
-# optional
-KIMI_MODEL=kimi-k3
+GOOGLE_GENERATIVE_AI_API_KEY=your_key_here   # https://aistudio.google.com/apikey
+# optional: flash | pro | full model id (default: gemini-2.5-flash)
+GEMINI_MODEL=flash
 
 AUTH_SECRET=          # openssl rand -base64 32
 AUTH_GOOGLE_ID=       # Google OAuth client ID
@@ -30,6 +30,12 @@ AUTH_GOOGLE_SECRET=   # Google OAuth client secret
 ALLOWED_EMAIL=you@gmail.com
 AUTH_TRUST_HOST=true
 ```
+
+### Google AI Studio key
+
+1. Open [Google AI Studio → API keys](https://aistudio.google.com/apikey).
+2. Create a key and paste it into `GOOGLE_GENERATIVE_AI_API_KEY`.
+3. Set `GEMINI_MODEL=flash` (default, `gemini-2.5-flash`) or `GEMINI_MODEL=pro` (`gemini-2.5-pro`).
 
 ### Google OAuth client (local)
 
@@ -62,7 +68,7 @@ Sign in at fantasy.premierleague.com → Points / Gameweek history. Your Manager
 
 Full from-scratch walkthrough (secrets, local `linux/amd64` build, push, `AUTH_URL`, OAuth): see **[DEPLOY.md](DEPLOY.md)**.
 
-The app is a stateless Next.js container (`Dockerfile` + `output: "standalone"`). Use **min instances = 0** and **request-based billing** so personal use usually stays within Cloud Run’s free tier. Your Moonshot API usage is the main ongoing cost.
+The app is a stateless Next.js container (`Dockerfile` + `output: "standalone"`). Use **min instances = 0** and **request-based billing** so personal use usually stays within Cloud Run’s free tier. Your Gemini (AI Studio) usage is the main ongoing cost.
 
 ### 1. One-time GCP setup
 
@@ -88,8 +94,8 @@ gcloud artifacts repositories create "$REPO" \
 ### 2. Secrets
 
 ```bash
-# Moonshot
-printf '%s' "$MOONSHOT_API_KEY" | gcloud secrets create MOONSHOT_API_KEY --data-file=-
+# Google AI Studio
+printf '%s' "$GOOGLE_GENERATIVE_AI_API_KEY" | gcloud secrets create GOOGLE_GENERATIVE_AI_API_KEY --data-file=-
 
 # Auth.js
 openssl rand -base64 32 | tr -d '\n' | gcloud secrets create AUTH_SECRET --data-file=-
@@ -103,7 +109,7 @@ Grant the Cloud Run runtime service account access to these secrets (replace `PR
 PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
 RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 
-for SECRET in MOONSHOT_API_KEY AUTH_SECRET AUTH_GOOGLE_ID AUTH_GOOGLE_SECRET; do
+for SECRET in GOOGLE_GENERATIVE_AI_API_KEY AUTH_SECRET AUTH_GOOGLE_ID AUTH_GOOGLE_SECRET; do
   gcloud secrets add-iam-policy-binding "$SECRET" \
     --member="serviceAccount:${RUNTIME_SA}" \
     --role="roles/secretmanager.secretAccessor"
@@ -125,8 +131,8 @@ gcloud run deploy "$SERVICE" \
   --cpu=1 \
   --memory=1Gi \
   --timeout=60 \
-  --set-env-vars="AUTH_TRUST_HOST=true,ALLOWED_EMAIL=you@gmail.com,KIMI_MODEL=kimi-k3" \
-  --set-secrets="MOONSHOT_API_KEY=MOONSHOT_API_KEY:latest,AUTH_SECRET=AUTH_SECRET:latest,AUTH_GOOGLE_ID=AUTH_GOOGLE_ID:latest,AUTH_GOOGLE_SECRET=AUTH_GOOGLE_SECRET:latest"
+  --set-env-vars="AUTH_TRUST_HOST=true,ALLOWED_EMAIL=you@gmail.com,GEMINI_MODEL=flash" \
+  --set-secrets="GOOGLE_GENERATIVE_AI_API_KEY=GOOGLE_GENERATIVE_AI_API_KEY:latest,AUTH_SECRET=AUTH_SECRET:latest,AUTH_GOOGLE_ID=AUTH_GOOGLE_ID:latest,AUTH_GOOGLE_SECRET=AUTH_GOOGLE_SECRET:latest"
 ```
 
 `--allow-unauthenticated` makes the Cloud Run URL publicly reachable so browsers can load the app. **App-level Auth.js** still requires Google sign-in and rejects any email that is not `ALLOWED_EMAIL`.
@@ -156,4 +162,4 @@ gcloud run deploy "$SERVICE" \
 - Request-based billing + `min-instances=0`: idle cost is effectively $0
 - Free tier (per billing account, Tier 1 regions like `us-central1`): ~180k vCPU-seconds, ~360k GiB-seconds, 2M requests / month
 - Artifact Registry / Cloud Build for a small personal image is usually free or cents
-- Google OAuth is free; Moonshot/Kimi usage is billed separately
+- Google OAuth is free; Gemini (AI Studio) usage is billed separately

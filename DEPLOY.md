@@ -10,7 +10,7 @@ The app is a Next.js standalone container (`Dockerfile` + `output: "standalone"`
 - Docker Desktop (or equivalent) running
 - A GCP project with billing enabled
 - Values ready (same as `.env.example` / `.env.local`):
-  - `MOONSHOT_API_KEY`
+  - `GOOGLE_GENERATIVE_AI_API_KEY` — from https://aistudio.google.com/apikey
   - `AUTH_SECRET` — `openssl rand -base64 32`
   - `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` — Google OAuth Web client
   - `ALLOWED_EMAIL` — exact allowlisted Gmail
@@ -69,7 +69,7 @@ create_or_update_secret() {
   fi
 }
 
-create_or_update_secret MOONSHOT_API_KEY "$(get_env MOONSHOT_API_KEY)"
+create_or_update_secret GOOGLE_GENERATIVE_AI_API_KEY "$(get_env GOOGLE_GENERATIVE_AI_API_KEY)"
 create_or_update_secret AUTH_SECRET "$(get_env AUTH_SECRET)"
 create_or_update_secret AUTH_GOOGLE_ID "$(get_env AUTH_GOOGLE_ID)"
 create_or_update_secret AUTH_GOOGLE_SECRET "$(get_env AUTH_GOOGLE_SECRET)"
@@ -81,7 +81,7 @@ Grant the default Compute runtime service account access:
 PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
 RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 
-for SECRET in MOONSHOT_API_KEY AUTH_SECRET AUTH_GOOGLE_ID AUTH_GOOGLE_SECRET; do
+for SECRET in GOOGLE_GENERATIVE_AI_API_KEY AUTH_SECRET AUTH_GOOGLE_ID AUTH_GOOGLE_SECRET; do
   gcloud secrets add-iam-policy-binding "$SECRET" \
     --member="serviceAccount:${RUNTIME_SA}" \
     --role="roles/secretmanager.secretAccessor" \
@@ -89,7 +89,7 @@ for SECRET in MOONSHOT_API_KEY AUTH_SECRET AUTH_GOOGLE_ID AUTH_GOOGLE_SECRET; do
 done
 ```
 
-Non-secret config (`ALLOWED_EMAIL`, `KIMI_MODEL`, `AUTH_TRUST_HOST`, `AUTH_URL`) goes on the Cloud Run service as env vars, not secrets.
+Non-secret config (`ALLOWED_EMAIL`, `GEMINI_MODEL`, `AUTH_TRUST_HOST`, `AUTH_URL`) goes on the Cloud Run service as env vars, not secrets.
 
 ## 4. Build locally and push
 
@@ -116,8 +116,8 @@ First deploy (creates the service):
 
 ```bash
 ALLOWED_EMAIL=$(get_env ALLOWED_EMAIL)
-KIMI_MODEL=$(get_env KIMI_MODEL)
-KIMI_MODEL=${KIMI_MODEL:-kimi-k3}
+GEMINI_MODEL=$(get_env GEMINI_MODEL)
+GEMINI_MODEL=${GEMINI_MODEL:-flash}
 
 gcloud run deploy "$SERVICE" \
   --image="$IMAGE" \
@@ -129,8 +129,8 @@ gcloud run deploy "$SERVICE" \
   --cpu=1 \
   --memory=1Gi \
   --timeout=60 \
-  --set-env-vars="AUTH_TRUST_HOST=true,ALLOWED_EMAIL=${ALLOWED_EMAIL},KIMI_MODEL=${KIMI_MODEL}" \
-  --set-secrets="MOONSHOT_API_KEY=MOONSHOT_API_KEY:latest,AUTH_SECRET=AUTH_SECRET:latest,AUTH_GOOGLE_ID=AUTH_GOOGLE_ID:latest,AUTH_GOOGLE_SECRET=AUTH_GOOGLE_SECRET:latest"
+  --set-env-vars="AUTH_TRUST_HOST=true,ALLOWED_EMAIL=${ALLOWED_EMAIL},GEMINI_MODEL=${GEMINI_MODEL}" \
+  --set-secrets="GOOGLE_GENERATIVE_AI_API_KEY=GOOGLE_GENERATIVE_AI_API_KEY:latest,AUTH_SECRET=AUTH_SECRET:latest,AUTH_GOOGLE_ID=AUTH_GOOGLE_ID:latest,AUTH_GOOGLE_SECRET=AUTH_GOOGLE_SECRET:latest"
 ```
 
 Notes:
@@ -181,9 +181,9 @@ Env and secrets persist unless you pass `--set-env-vars` / `--set-secrets` again
 ### Update a secret later
 
 ```bash
-printf '%s' "$NEW_VALUE" | gcloud secrets versions add MOONSHOT_API_KEY --data-file=-
+printf '%s' "$NEW_VALUE" | gcloud secrets versions add GOOGLE_GENERATIVE_AI_API_KEY --data-file=-
 # Cloud Run picks up :latest on new revisions; force a no-op deploy if needed:
-gcloud run services update "$SERVICE" --region="$REGION" --update-secrets=MOONSHOT_API_KEY=MOONSHOT_API_KEY:latest
+gcloud run services update "$SERVICE" --region="$REGION" --update-secrets=GOOGLE_GENERATIVE_AI_API_KEY=GOOGLE_GENERATIVE_AI_API_KEY:latest
 ```
 
 ## Smoke checks
@@ -213,5 +213,5 @@ Custom domain (`fplassistant.app`) work is tracked separately under `todos/` (gi
 - Cloud Run: request-based + `min-instances=0` → idle ≈ $0; free tier applies in many regions
 - Artifact Registry: small image storage usually free or cents
 - Secret Manager: negligible at this scale
-- Moonshot / Kimi API: billed separately (main ongoing cost)
+- Gemini (Google AI Studio) API: billed separately (main ongoing cost)
 - Google OAuth: free

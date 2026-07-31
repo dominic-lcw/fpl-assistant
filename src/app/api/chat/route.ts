@@ -1,4 +1,4 @@
-import { moonshotai } from "@ai-sdk/moonshotai";
+import { google } from "@ai-sdk/google";
 import { frontendTools } from "@assistant-ui/react-ai-sdk";
 import {
   convertToModelMessages,
@@ -7,6 +7,7 @@ import {
   type UIMessage,
 } from "ai";
 
+import { resolveGeminiModelId } from "@/lib/ai/gemini";
 import { createFplTools } from "@/lib/fpl/tools";
 import { managerIdSchema } from "@/lib/fpl/validation";
 
@@ -43,22 +44,22 @@ export async function POST(req: Request) {
     tools?: Record<string, unknown>;
   } = body;
 
-  if (!process.env.MOONSHOT_API_KEY) {
+  if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
     return new Response(
       JSON.stringify({
         error:
-          "Missing MOONSHOT_API_KEY. Add it to .env.local (see .env.example).",
+          "Missing GOOGLE_GENERATIVE_AI_API_KEY. Add an AI Studio key to .env.local (see .env.example).",
       }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
 
-  const modelId = process.env.KIMI_MODEL?.trim() || "kimi-k3";
+  const modelId = resolveGeminiModelId();
   const managerId = extractManagerId(system);
   const fplTools = createFplTools(managerId);
 
   const result = streamText({
-    model: moonshotai(modelId),
+    model: google(modelId),
     system: [SYSTEM_PROMPT, system].filter(Boolean).join("\n\n"),
     messages: await convertToModelMessages(messages),
     stopWhen: stepCountIs(8),

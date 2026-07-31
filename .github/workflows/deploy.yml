@@ -1,0 +1,106 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-cloud-run
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: openclaw-dominic-209
+  REGION: asia-southeast1
+  SERVICE: fpl-assistant
+  REPO: fpl-assistant
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+  deploy:
+    name: build-and-deploy
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Artifact Registry auth
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Set image tags
+        id: image
+        run: |
+          IMAGE_BASE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${SERVICE}"
+          SHA_TAG="${IMAGE_BASE}:${GITHUB_SHA}"
+          LATEST_TAG="${IMAGE_BASE}:latest"
+          echo "sha=${SHA_TAG}" >> "$GITHUB_OUTPUT"
+          echo "latest=${LATEST_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Build container image
+        run: |
+          docker build \
+            --platform linux/amd64 \
+            --tag "${{ steps.image.outputs.sha }}" \
+            --tag "${{ steps.image.outputs.latest }}" \
+            .
+
+      - name: Push container image
+        run: |
+          docker push "${{ steps.image.outputs.sha }}"
+          docker push "${{ steps.image.outputs.latest }}"
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          image: ${{ steps.image.outputs.sha }}
+
+      - name: Smoke check
+        run: |
+          curl -fsS -o /dev/null -w "%{http_code}\n" "${{ steps.deploy.outputs.url }}/signin" | grep -E '^(200|302)$'

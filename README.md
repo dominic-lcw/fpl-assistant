@@ -144,6 +144,10 @@ Redeploy only if you change the image or env; OAuth redirect updates apply in Go
 
 ### 5. Redeploy after code changes
 
+Pushing to `main` runs [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml): tests, image build/push to Artifact Registry, and Cloud Run deploy onto the new image. One-time Workload Identity setup is in **[DEPLOY.md](DEPLOY.md)** (§8).
+
+Manual fallback:
+
 ```bash
 gcloud builds submit --tag "${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${SERVICE}:latest"
 gcloud run deploy "$SERVICE" \

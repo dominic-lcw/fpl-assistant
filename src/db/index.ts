@@ -7,13 +7,13 @@ const globalForDatabase = globalThis as unknown as {
 };
 
 function createPool() {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error("DATABASE_URL is required to use the database.");
-  }
-
   return new Pool({
-    connectionString,
+    // Creating a pool is lazy. The fallback keeps `next build` from opening a
+    // database connection while evaluating route modules; requests still need
+    // DATABASE_URL to successfully execute a query.
+    connectionString:
+      process.env.DATABASE_URL ??
+      "postgresql://postgres:postgres@127.0.0.1:5432/fpl_assistant",
     max: 5,
   });
 }

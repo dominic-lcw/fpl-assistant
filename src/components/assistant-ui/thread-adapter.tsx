@@ -78,10 +78,13 @@ export const threadListAdapter: RemoteThreadListAdapter = {
     });
     return createAssistantStream((controller) => controller.appendText(title));
   },
-  unstable_Provider({ children }: PropsWithChildren) {
-    const aui = useAui();
-    const history = useMemo<ThreadHistoryAdapter>(
-      () => ({
+  unstable_Provider: ThreadHistoryProvider,
+};
+
+function ThreadHistoryProvider({ children }: PropsWithChildren) {
+  const aui = useAui();
+  const history = useMemo<ThreadHistoryAdapter>(
+    () => ({
         async load() {
           return { messages: [] };
         },
@@ -123,14 +126,13 @@ export const threadListAdapter: RemoteThreadListAdapter = {
             });
           },
         }),
-      }),
-      [aui],
-    );
+    }),
+    [aui],
+  );
 
-    return (
-      <RuntimeAdapterProvider adapters={{ history }}>
-        {children}
-      </RuntimeAdapterProvider>
-    );
-  },
-};
+  return (
+    <RuntimeAdapterProvider adapters={{ history }}>
+      {children}
+    </RuntimeAdapterProvider>
+  );
+}

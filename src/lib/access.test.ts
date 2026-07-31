@@ -7,10 +7,8 @@ const mocks = vi.hoisted(() => ({
   }),
 }));
 
-const { auth, redirect } = mocks;
-
-vi.mock("@/auth", () => ({ auth }));
-vi.mock("next/navigation", () => ({ redirect }));
+vi.mock("@/auth", () => ({ auth: mocks.auth }));
+vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
 
 import {
   getApprovedUser,
@@ -20,12 +18,12 @@ import {
 
 describe("access controls", () => {
   beforeEach(() => {
-    auth.mockReset();
-    redirect.mockClear();
+    mocks.auth.mockReset();
+    mocks.redirect.mockClear();
   });
 
   it("returns only approved users", async () => {
-    auth.mockResolvedValue({
+    mocks.auth.mockResolvedValue({
       user: {
         id: "user-1",
         email: "member@example.com",
@@ -39,30 +37,30 @@ describe("access controls", () => {
       status: "approved",
     });
 
-    auth.mockResolvedValue({
+    mocks.auth.mockResolvedValue({
       user: { id: "user-1", role: "member", status: "pending" },
     });
     await expect(getApprovedUser()).resolves.toBeNull();
   });
 
   it("redirects unapproved users to the pending gate", async () => {
-    auth.mockResolvedValue({
+    mocks.auth.mockResolvedValue({
       user: { id: "user-1", role: "member", status: "revoked" },
     });
 
     await expect(requireApprovedUser()).rejects.toThrow("redirect:/pending");
-    expect(redirect).toHaveBeenCalledWith("/pending");
+    expect(mocks.redirect).toHaveBeenCalledWith("/pending");
   });
 
   it("allows only administrators through the administrator guard", async () => {
-    auth.mockResolvedValue({
+    mocks.auth.mockResolvedValue({
       user: { id: "admin-1", role: "admin", status: "approved" },
     });
     await expect(requireAdministrator()).resolves.toMatchObject({
       id: "admin-1",
     });
 
-    auth.mockResolvedValue({
+    mocks.auth.mockResolvedValue({
       user: { id: "user-1", role: "member", status: "approved" },
     });
     await expect(requireAdministrator()).rejects.toThrow("redirect:/");

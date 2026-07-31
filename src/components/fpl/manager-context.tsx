@@ -182,92 +182,46 @@ export function ManagerProvider({ children }: { children: ReactNode }) {
 }
 
 export function ManagerIdBar({ authSlot }: { authSlot?: ReactNode }) {
-  const {
-    managerId,
-    snapshot,
-    gameweek,
-    loading,
-    error,
-    setManagerId,
-    clearManager,
-  } = useManagerContext();
-  return (
-    <header className="bg-background/90 border-border border-b px-4 py-3 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <div className="text-foreground text-sm font-medium tracking-wide">
-            FPL Assistant
-          </div>
-          {snapshot ? (
-            <div className="text-muted-foreground truncate text-sm">
-              {snapshot.managerName} · {snapshot.teamName}
-              {gameweek ? ` · ${gameweek.name}` : ""}
-              {snapshot.overallRank != null
-                ? ` · rank ${snapshot.overallRank.toLocaleString()}`
-                : ""}
-            </div>
-          ) : (
-            <div className="text-muted-foreground text-sm">
-              Enter your Manager ID to personalize advice
-            </div>
-          )}
-        </div>
+  const { managerId, loading, error, setManagerId } = useManagerContext();
 
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-          <form
-            className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const form = new FormData(e.currentTarget);
-              const value = String(form.get("managerId") ?? "");
-              void setManagerId(value);
-            }}
+  return (
+    <header className="bg-background/90 border-border border-b px-4 py-2 backdrop-blur">
+      <div className="flex items-center justify-between gap-3">
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const form = new FormData(e.currentTarget);
+            const value = String(form.get("managerId") ?? "");
+            void setManagerId(value);
+          }}
+        >
+          <label className="sr-only" htmlFor="manager-id">
+            Manager ID
+          </label>
+          <input
+            id="manager-id"
+            name="managerId"
+            key={managerId ?? "empty"}
+            inputMode="numeric"
+            pattern="[0-9]*"
+            placeholder="Manager ID"
+            defaultValue={managerId ?? ""}
+            className="border-input bg-background text-foreground focus:border-ring h-9 w-40 rounded-lg border px-3 text-sm outline-none"
+          />
+          <button
+            type="submit"
+            disabled={loading}
+            className="bg-primary text-primary-foreground hover:bg-primary/80 h-9 rounded-lg px-3 text-sm font-medium transition disabled:opacity-60"
           >
-            <label className="sr-only" htmlFor="manager-id">
-              Manager ID
-            </label>
-            <input
-              id="manager-id"
-              name="managerId"
-              key={managerId ?? "empty"}
-              inputMode="numeric"
-              pattern="[0-9]*"
-              placeholder="Manager ID"
-              defaultValue={managerId ?? ""}
-              className="border-input bg-background text-foreground focus:border-ring h-9 w-full rounded-lg border px-3 text-sm outline-none sm:w-44"
-            />
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                disabled={loading}
-                className="bg-primary text-primary-foreground hover:bg-primary/80 h-9 rounded-lg px-3 text-sm font-medium transition disabled:opacity-60"
-              >
-                {loading ? "Loading…" : snapshot ? "Update" : "Connect"}
-              </button>
-              {snapshot ? (
-                <button
-                  type="button"
-                  onClick={clearManager}
-                  className="border-border text-foreground hover:bg-muted h-9 rounded-lg border px-3 text-sm transition"
-                >
-                  Clear
-                </button>
-              ) : null}
-            </div>
-          </form>
-          {authSlot}
-        </div>
+            {loading ? "Saving…" : "Save"}
+          </button>
+        </form>
+        {authSlot}
       </div>
       {error ? (
-        <p className="text-destructive mx-auto mt-2 max-w-5xl text-sm">
-          {error}
-        </p>
-      ) : (
-        <p className="text-muted-foreground mx-auto mt-2 max-w-5xl text-xs">
-          Find your Manager ID in the FPL site URL under Points / Gameweek
-          history (the number before <code>/history</code>).
-        </p>
-      )}
+        <p className="text-destructive mt-1.5 text-sm">{error}</p>
+      ) : null}
     </header>
   );
 }

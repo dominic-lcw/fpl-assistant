@@ -21,6 +21,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     authorized({ auth, request }) {
       const { pathname } = request.nextUrl;
       if (pathname.startsWith("/signin")) return true;
+      // Local/cloud preview without Google OAuth credentials.
+      if (
+        process.env.NODE_ENV === "development" &&
+        process.env.AUTH_BYPASS === "true"
+      ) {
+        return true;
+      }
       return !!auth?.user;
     },
   },

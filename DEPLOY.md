@@ -168,6 +168,10 @@ Keep `http://localhost:3000` entries for local dev. Changes apply immediately (n
 
 ## 7. Redeploy after code changes
 
+Preferred: merge to `main` and let GitHub Actions build/push/deploy (see [CI/CD](#8-cicd-github-actions--cloud-run) below).
+
+Manual fallback:
+
 ```bash
 docker build --platform linux/amd64 -t "$IMAGE" .
 docker push "$IMAGE"
@@ -185,6 +189,84 @@ printf '%s' "$NEW_VALUE" | gcloud secrets versions add MOONSHOT_API_KEY --data-f
 # Cloud Run picks up :latest on new revisions; force a no-op deploy if needed:
 gcloud run services update "$SERVICE" --region="$REGION" --update-secrets=MOONSHOT_API_KEY=MOONSHOT_API_KEY:latest
 ```
+
+## 8. CI/CD (GitHub Actions → Cloud Run)
+
+Workflow: [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
+
+On every push to `main` (and manual `workflow_dispatch`), it:
+
+1. Runs typecheck + tests
+2. Authenticates to GCP via Workload Identity Federation (no JSON key)
+3. Builds a `linux/amd64` image and pushes `:sha` + `:latest` to Artifact Registry
+4. Deploys that image to Cloud Run so the service runs the new revision
+5. Smoke-checks `/signin`
+
+### One-time GCP setup for GitHub Actions
+
+```bash
+export PROJECT_ID=openclaw-dominic-209
+export REGION=asia-southeast1
+export SERVICE=fpl-assistant
+export GITHUB_REPO=dominic-lcw/fpl-assistant   # owner/repo
+export DEPLOY_SA=github-deployer
+
+gcloud config set project "$PROJECT_ID"
+PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
+RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+
+# Deployer service account (no key; impersonated by GitHub via WIF)
+gcloud iam service-accounts create "$DEPLOY_SA" \
+  --display-name="GitHub Actions Cloud Run deployer" || true
+
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:${DEPLOY_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/run.admin"
+
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="serviceAccount:${DEPLOY_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/artifactregistry.writer"
+
+gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_SA" \
+  --member="serviceAccount:${DEPLOY_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/iam.serviceAccountUser"
+
+# Workload Identity pool + GitHub OIDC provider
+gcloud iam workload-identity-pools create github \
+  --location=global \
+  --display-name="GitHub Actions" || true
+
+gcloud iam workload-identity-pools providers create-oidc github \
+  --location=global \
+  --workload-identity-pool=github \
+  --display-name="GitHub" \
+  --issuer-uri="https://token.actions.githubusercontent.com" \
+  --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository,attribute.ref=assertion.ref" \
+  --attribute-condition="assertion.repository=='${GITHUB_REPO}'" || true
+
+gcloud iam service-accounts add-iam-policy-binding \
+  "${DEPLOY_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/iam.workloadIdentityUser" \
+  --member="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/github/attribute.repository/${GITHUB_REPO}"
+
+echo "WIF provider resource name:"
+gcloud iam workload-identity-pools providers describe github \
+  --location=global \
+  --workload-identity-pool=github \
+  --format='value(name)'
+```
+
+### GitHub repository configuration
+
+1. Create a GitHub Environment named **`production`** (Settings → Environments).
+2. Add repository (or environment) secrets:
+
+| Secret | Value |
+|--------|--------|
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Full provider resource name from the `describe` command above |
+| `GCP_SERVICE_ACCOUNT` | `github-deployer@openclaw-dominic-209.iam.gserviceaccount.com` |
+
+Optional: add required reviewers on the `production` environment if you want a human gate before deploy.
 
 ## Smoke checks
 

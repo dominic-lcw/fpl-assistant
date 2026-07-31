@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const auth = vi.fn();
-const redirect = vi.fn((path: string) => {
-  throw new Error(`redirect:${path}`);
-});
+const mocks = vi.hoisted(() => ({
+  auth: vi.fn(),
+  redirect: vi.fn((path: string) => {
+    throw new Error(`redirect:${path}`);
+  }),
+}));
+
+const { auth, redirect } = mocks;
 
 vi.mock("@/auth", () => ({ auth }));
 vi.mock("next/navigation", () => ({ redirect }));

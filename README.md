@@ -144,7 +144,7 @@ Redeploy only if you change the image or env; OAuth redirect updates apply in Go
 
 ### 5. Redeploy after code changes
 
-Pushing to `main` runs [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml): tests, image build/push to Artifact Registry, and Cloud Run deploy onto the new image. One-time Workload Identity setup is in **[DEPLOY.md](DEPLOY.md)** (§8).
+Pushing to `main` runs [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml): tests, image build/push to Artifact Registry, and Cloud Run deploy onto the new image. One-time Workload Identity setup: **[docs/github-actions-setup.md](docs/github-actions-setup.md)**.
 
 Manual fallback:
 

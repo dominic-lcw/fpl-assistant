@@ -9,6 +9,6 @@ This version has breaking changes — APIs, conventions, and file structure may 
 When working on Fantasy Premier League data, tools, or advice flows, use:
 
 - `.agents/skills/fpl-api/SKILL.md` — API endpoints and app tool mapping
-- `.agents/skills/fpl-web-search/SKILL.md` — web search for player/team/manager news
+- `.agents/skills/fpl-web-search/SKILL.md` — Moonshot web search for player/team/manager news
 
-Chat runtime tools are defined in `src/lib/fpl/tools.ts` (FPL API + `web_search`).
+Chat runtime tools are defined in `src/lib/fpl/tools.ts` (FPL API + Moonshot `web_search`).

@@ -25,6 +25,7 @@ import {
   managerIdSchema,
   playerIdSchema,
 } from "./validation";
+import { searchFplWeb } from "./web-search";
 
 function fplToolError(error: unknown): { error: string } {
   if (error instanceof FplApiError) {
@@ -408,6 +409,22 @@ export function createFplTools(defaultManagerId?: number) {
               "Scores are heuristic (form, xGI, minutes, fixture difficulty, availability). Treat as advice, not certainty.",
           };
         }),
+    }),
+
+    web_search: tool({
+      description:
+        "Search the web for Fantasy Premier League related news and context about players, teams, club managers, injuries, lineups, and FPL discussion. Use for time-sensitive news that is not in the FPL API. Do not use this for live points, prices, ownership, fixtures, or manager ranks — use the dedicated FPL tools instead.",
+      inputSchema: z.object({
+        query: z
+          .string()
+          .min(2)
+          .max(200)
+          .describe(
+            "Search query, e.g. 'Salah injury', 'Arsenal lineup', 'Haaland minutes'",
+          ),
+        limit: z.number().int().min(1).max(8).optional(),
+      }),
+      execute: async ({ query, limit = 5 }) => searchFplWeb(query, limit),
     }),
   };
 }

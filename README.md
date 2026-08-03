@@ -7,7 +7,9 @@ Fantasy Premier League chat assistant built with the [assistant-ui](https://www.
 - Google OAuth sign-in restricted to a single allowlisted email
 - Manager ID input with persisted profile snapshot
 - Live FPL tools: general info, fixtures, gameweek live, manager profile/history/squad, classic leagues, player detail
+- `web_search` tool for player/team/manager news (DuckDuckGo by default; optional Tavily)
 - Deterministic captain / transfer / watchlist suggestions from form, xGI, and fixture difficulty
+- Agent skills under `.agents/skills/` documenting FPL API endpoints and web-search usage
 - Minimal assistant-ui Thread chat UI with streaming responses
 
 ## Setup
@@ -29,7 +31,19 @@ AUTH_GOOGLE_ID=       # Google OAuth client ID
 AUTH_GOOGLE_SECRET=   # Google OAuth client secret
 ALLOWED_EMAIL=you@gmail.com
 AUTH_TRUST_HOST=true
+
+# optional — better web_search quality
+# TAVILY_API_KEY=tvly-...
 ```
+
+### Agent skills
+
+Project skills for coding agents live in `.agents/skills/`:
+
+- `fpl-api` — public FPL endpoints and how they map to `src/lib/fpl/*` tools
+- `fpl-web-search` — when to search the web for players, teams, and managers
+
+Restore other locked skills from `skills-lock.json` with `npx skills experimental_install` if needed.
 
 ### Google OAuth client (local)
 

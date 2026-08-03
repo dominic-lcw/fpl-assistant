@@ -135,7 +135,7 @@ export function ManagerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useAssistantInstructions(
-    `You are helping with Fantasy Premier League analysis. Prefer tool-backed answers.`,
+    `You are helping with Fantasy Premier League analysis. Prefer tool-backed answers. Use FPL API tools for stats/fixtures/squads and web_search for recent player, team, or manager news.`,
   );
 
   useAssistantContext({

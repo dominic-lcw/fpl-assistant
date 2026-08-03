@@ -44,7 +44,9 @@ yarn-error.log*
 next-env.d.ts
 
 # agent / editor
-.agents
+.agents/*
+!.agents/skills/
+!.agents/skills/**
 .cursor
 .vscode/
 

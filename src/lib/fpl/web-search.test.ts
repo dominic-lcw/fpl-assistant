@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   enrichFplSearchQuery,
   parseDuckDuckGoHtml,
+  parseRssItems,
+  parseWikipediaSearchJson,
 } from "./web-search-shared";
 
 describe("enrichFplSearchQuery", () => {
@@ -63,5 +65,60 @@ describe("parseDuckDuckGoHtml", () => {
       </div>
     `;
     expect(parseDuckDuckGoHtml(html, 1)).toHaveLength(1);
+  });
+});
+
+describe("parseRssItems", () => {
+  it("parses Google News style RSS items", () => {
+    const xml = `
+      <rss><channel>
+        <item>
+          <title><![CDATA[Salah injury latest - Scout]]></title>
+          <link>https://example.com/salah</link>
+          <description><![CDATA[Update on minutes risk.]]></description>
+        </item>
+        <item>
+          <title>Arsenal team news</title>
+          <link>https://example.com/arsenal</link>
+          <description>Press conference notes.</description>
+        </item>
+      </channel></rss>
+    `;
+
+    expect(parseRssItems(xml, 5)).toEqual([
+      {
+        title: "Salah injury latest - Scout",
+        url: "https://example.com/salah",
+        snippet: "Update on minutes risk.",
+      },
+      {
+        title: "Arsenal team news",
+        url: "https://example.com/arsenal",
+        snippet: "Press conference notes.",
+      },
+    ]);
+  });
+});
+
+describe("parseWikipediaSearchJson", () => {
+  it("maps search hits to wikipedia urls", () => {
+    const payload = {
+      query: {
+        search: [
+          {
+            title: "Mohamed Salah",
+            snippet: "Egyptian <span>footballer</span>",
+          },
+        ],
+      },
+    };
+
+    expect(parseWikipediaSearchJson(payload, 3)).toEqual([
+      {
+        title: "Mohamed Salah",
+        url: "https://en.wikipedia.org/wiki/Mohamed_Salah",
+        snippet: "Egyptian footballer",
+      },
+    ]);
   });
 });

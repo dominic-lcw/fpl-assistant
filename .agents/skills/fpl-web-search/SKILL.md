@@ -37,7 +37,7 @@ Add season/gameweek hints when relevant (`GW12`, `2025/26`).
 The chat assistant exposes a `web_search` tool (`src/lib/fpl/web-search.ts`, wired in `src/lib/fpl/tools.ts`):
 
 1. Prefer that tool from the FPL Assistant chat agent.
-2. Optional `TAVILY_API_KEY` upgrades result quality; otherwise DuckDuckGo HTML search is used.
+2. Provider order: optional `TAVILY_API_KEY` → DuckDuckGo HTML → Google News RSS → Wikipedia.
 3. Cite result titles/URLs and distinguish rumor vs confirmed club/league reporting.
 4. After news findings, re-check API availability fields (`status`, `chance_of_playing_*`, `news`) before giving transfer/captain advice.
 

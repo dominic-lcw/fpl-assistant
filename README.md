@@ -7,7 +7,7 @@ Fantasy Premier League chat assistant built with the [assistant-ui](https://www.
 - Google OAuth sign-in restricted to a single allowlisted email
 - Manager ID input with persisted profile snapshot
 - Live FPL tools: general info, fixtures, gameweek live, manager profile/history/squad, classic leagues, player detail
-- `web_search` tool for player/team/manager news (DuckDuckGo by default; optional Tavily)
+- `web_search` tool for player/team/manager news (Tavily optional; DuckDuckGo → Google News → Wikipedia fallbacks)
 - Deterministic captain / transfer / watchlist suggestions from form, xGI, and fixture difficulty
 - Agent skills under `.agents/skills/` documenting FPL API endpoints and web-search usage
 - Minimal assistant-ui Thread chat UI with streaming responses

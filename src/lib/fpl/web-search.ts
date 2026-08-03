@@ -3,16 +3,29 @@ import "server-only";
 import {
   enrichFplSearchQuery,
   parseDuckDuckGoHtml,
+  parseRssItems,
+  parseWikipediaSearchJson,
   type WebSearchResult,
 } from "./web-search-shared";
 
+export type WebSearchProvider =
+  | "tavily"
+  | "duckduckgo"
+  | "google-news"
+  | "wikipedia";
+
 export type WebSearchResponse = {
   query: string;
-  provider: "tavily" | "duckduckgo";
+  provider: WebSearchProvider;
   results: WebSearchResult[];
 };
 
-export { enrichFplSearchQuery, parseDuckDuckGoHtml } from "./web-search-shared";
+export {
+  enrichFplSearchQuery,
+  parseDuckDuckGoHtml,
+  parseRssItems,
+  parseWikipediaSearchJson,
+} from "./web-search-shared";
 
 async function searchWithTavily(
   query: string,
@@ -53,6 +66,10 @@ async function searchWithTavily(
     .filter((item) => item.title && item.url)
     .slice(0, limit);
 
+  if (results.length === 0) {
+    throw new Error("Tavily returned no results");
+  }
+
   return { query, provider: "tavily", results };
 }
 
@@ -77,11 +94,78 @@ async function searchWithDuckDuckGo(
   }
 
   const html = await response.text();
-  return {
-    query,
-    provider: "duckduckgo",
-    results: parseDuckDuckGoHtml(html, limit),
-  };
+  if (/anomaly|captcha|challenge/i.test(html)) {
+    throw new Error("DuckDuckGo challenged the request");
+  }
+
+  const results = parseDuckDuckGoHtml(html, limit);
+  if (results.length === 0) {
+    throw new Error("DuckDuckGo returned no results");
+  }
+
+  return { query, provider: "duckduckgo", results };
+}
+
+async function searchWithGoogleNews(
+  query: string,
+  limit: number,
+): Promise<WebSearchResponse> {
+  const url = new URL("https://news.google.com/rss/search");
+  url.searchParams.set("q", query);
+  url.searchParams.set("hl", "en-GB");
+  url.searchParams.set("gl", "GB");
+  url.searchParams.set("ceid", "GB:en");
+
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/rss+xml, application/xml, text/xml",
+      "User-Agent": "fpl-assistant/1.0",
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Google News search failed (${response.status})`);
+  }
+
+  const xml = await response.text();
+  const results = parseRssItems(xml, limit);
+  if (results.length === 0) {
+    throw new Error("Google News returned no results");
+  }
+
+  return { query, provider: "google-news", results };
+}
+
+async function searchWithWikipedia(
+  query: string,
+  limit: number,
+): Promise<WebSearchResponse> {
+  const url = new URL("https://en.wikipedia.org/w/api.php");
+  url.searchParams.set("action", "query");
+  url.searchParams.set("list", "search");
+  url.searchParams.set("srsearch", query);
+  url.searchParams.set("srlimit", String(limit));
+  url.searchParams.set("format", "json");
+
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "fpl-assistant/1.0",
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Wikipedia search failed (${response.status})`);
+  }
+
+  const results = parseWikipediaSearchJson(await response.json(), limit);
+  if (results.length === 0) {
+    throw new Error("Wikipedia returned no results");
+  }
+
+  return { query, provider: "wikipedia", results };
 }
 
 export async function searchFplWeb(
@@ -92,27 +176,26 @@ export async function searchFplWeb(
   const cappedLimit = Math.min(Math.max(limit, 1), 8);
   const tavilyKey = process.env.TAVILY_API_KEY?.trim();
 
-  try {
-    if (tavilyKey) {
-      try {
-        return await searchWithTavily(query, cappedLimit, tavilyKey);
-      } catch {
-        // Fall back to the keyless provider if Tavily is misconfigured/unavailable.
-      }
-    }
-    const result = await searchWithDuckDuckGo(query, cappedLimit);
-    if (result.results.length === 0) {
-      return {
-        error: `No web results for "${query}". Try a more specific player, team, or manager query.`,
-      };
-    }
-    return result;
-  } catch (error) {
-    return {
-      error:
-        error instanceof Error
-          ? error.message
-          : "Unexpected web search failure.",
-    };
+  const providers: Array<() => Promise<WebSearchResponse>> = [];
+  if (tavilyKey) {
+    providers.push(() => searchWithTavily(query, cappedLimit, tavilyKey));
   }
+  providers.push(
+    () => searchWithDuckDuckGo(query, cappedLimit),
+    () => searchWithGoogleNews(query, cappedLimit),
+    () => searchWithWikipedia(query, cappedLimit),
+  );
+
+  const errors: string[] = [];
+  for (const run of providers) {
+    try {
+      return await run();
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : "unknown error");
+    }
+  }
+
+  return {
+    error: `No web results for "${query}". Tried: ${errors.join("; ")}`,
+  };
 }

@@ -9,6 +9,8 @@ Fantasy Premier League chat assistant built with the [assistant-ui](https://www.
 - Live FPL tools: general info, fixtures, gameweek live, manager profile/history/squad, classic leagues, player detail
 - Deterministic captain / transfer / watchlist suggestions from form, xGI, and fixture difficulty
 - Minimal assistant-ui Thread chat UI with streaming responses
+- Composer model picker for Kimi K3 and Kimi K2.7
+- Last-reply token usage ring (assistant-ui Context Display)
 
 ## Setup
 
@@ -21,7 +23,7 @@ Fill in `.env.local`:
 
 ```
 MOONSHOT_API_KEY=your_key_here
-# optional
+# optional default when the UI does not send a model (kimi-k3 | kimi-k2.7-code)
 KIMI_MODEL=kimi-k3
 
 AUTH_SECRET=          # openssl rand -base64 32

@@ -2,11 +2,14 @@ import { moonshotai } from "@ai-sdk/moonshotai";
 import { frontendTools } from "@assistant-ui/react-ai-sdk";
 import {
   convertToModelMessages,
+  createUIMessageStreamResponse,
   stepCountIs,
   streamText,
+  toUIMessageStream,
   type UIMessage,
 } from "ai";
 
+import { resolveKimiModelId } from "@/lib/kimi/models";
 import { createFplTools } from "@/lib/fpl/tools";
 import { managerIdSchema } from "@/lib/fpl/validation";
 
@@ -37,10 +40,12 @@ export async function POST(req: Request) {
     messages,
     system,
     tools: frontendToolDefs,
+    model,
   }: {
     messages: UIMessage[];
     system?: string;
     tools?: Record<string, unknown>;
+    model?: string;
   } = body;
 
   if (!process.env.MOONSHOT_API_KEY) {
@@ -53,7 +58,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const modelId = process.env.KIMI_MODEL?.trim() || "kimi-k3";
+  const modelId = resolveKimiModelId(model);
   const managerId = extractManagerId(system);
   const fplTools = createFplTools(managerId);
 
@@ -68,5 +73,18 @@ export async function POST(req: Request) {
     },
   });
 
-  return result.toUIMessageStreamResponse();
+  return createUIMessageStreamResponse({
+    stream: toUIMessageStream({
+      stream: result.stream,
+      messageMetadata: ({ part }) => {
+        if (part.type === "finish") {
+          return { usage: part.totalUsage };
+        }
+        if (part.type === "finish-step") {
+          return { modelId: part.response.modelId };
+        }
+        return undefined;
+      },
+    }),
+  });
 }

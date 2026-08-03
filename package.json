@@ -10,7 +10,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "db:proxy": "bash scripts/db-proxy.sh"
   },
   "dependencies": {
     "@ai-sdk/moonshotai": "^3.0.17",

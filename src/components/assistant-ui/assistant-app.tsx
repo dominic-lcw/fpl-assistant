@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import {
   AssistantChatTransport,
@@ -9,16 +9,29 @@ import {
 import { lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { Thread } from "@/components/assistant-ui/thread";
 import {
+  ModelProvider,
+  useModelSelection,
+} from "@/components/assistant-ui/model-picker";
+import {
   ManagerIdBar,
   ManagerProvider,
 } from "@/components/fpl/manager-context";
 
-export function AssistantApp({ authSlot }: { authSlot?: ReactNode }) {
+function AssistantRuntimeShell({ authSlot }: { authSlot?: ReactNode }) {
+  const { modelId } = useModelSelection();
+
+  const transport = useMemo(
+    () =>
+      new AssistantChatTransport({
+        api: "/api/chat",
+        body: { model: modelId },
+      }),
+    [modelId],
+  );
+
   const runtime = useChatRuntime({
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
-    transport: new AssistantChatTransport({
-      api: "/api/chat",
-    }),
+    transport,
   });
 
   return (
@@ -32,5 +45,13 @@ export function AssistantApp({ authSlot }: { authSlot?: ReactNode }) {
         </div>
       </ManagerProvider>
     </AssistantRuntimeProvider>
+  );
+}
+
+export function AssistantApp({ authSlot }: { authSlot?: ReactNode }) {
+  return (
+    <ModelProvider>
+      <AssistantRuntimeShell authSlot={authSlot} />
+    </ModelProvider>
   );
 }

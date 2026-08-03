@@ -26,7 +26,7 @@ FPL API tools (prefer these for official numbers):
 - get_suggestions → deterministic captain/transfer/watchlist from API data
 
 Web tool:
-- web_search → injuries, press, lineups, manager/team news, and other off-API FPL context about players, teams, or managers
+- web_search → Moonshot official web search for injuries, press, lineups, manager/team news, and other off-API FPL context
 
 Rules:
 - Always use tools for live FPL facts. Do not invent player stats, fixtures, ranks, or IDs.

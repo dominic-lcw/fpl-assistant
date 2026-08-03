@@ -413,18 +413,17 @@ export function createFplTools(defaultManagerId?: number) {
 
     web_search: tool({
       description:
-        "Search the web for Fantasy Premier League related news and context about players, teams, club managers, injuries, lineups, and FPL discussion. Use for time-sensitive news that is not in the FPL API. Do not use this for live points, prices, ownership, fixtures, or manager ranks — use the dedicated FPL tools instead.",
+        "Moonshot official web search for Fantasy Premier League news and context about players, teams, club managers, injuries, lineups, and FPL discussion. Use for time-sensitive news that is not in the FPL API. Do not use this for live points, prices, ownership, fixtures, or manager ranks — use the dedicated FPL tools instead.",
       inputSchema: z.object({
         query: z
           .string()
           .min(2)
           .max(200)
           .describe(
-            "Search query, e.g. 'Salah injury', 'Arsenal lineup', 'Haaland minutes'",
+            "What to search for, e.g. 'Salah injury', 'Arsenal lineup', 'Haaland minutes'",
           ),
-        limit: z.number().int().min(1).max(8).optional(),
       }),
-      execute: async ({ query, limit = 5 }) => searchFplWeb(query, limit),
+      execute: async ({ query }) => searchFplWeb(query),
     }),
   };
 }

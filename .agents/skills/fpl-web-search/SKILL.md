@@ -1,6 +1,6 @@
 ---
 name: fpl-web-search
-description: Search the web for Fantasy Premier League topics — player news, injuries, team press, manager lineups, price-change chatter, and tactical context. Use when FPL API stats are not enough or the user asks about recent news on players, teams, or managers.
+description: Search the web for Fantasy Premier League topics — player news, injuries, team press, manager lineups, price-change chatter, and tactical context — via Moonshot official web search. Use when FPL API stats are not enough or the user asks about recent news on players, teams, or managers.
 ---
 
 # FPL Web Search Skill
@@ -34,17 +34,26 @@ Add season/gameweek hints when relevant (`GW12`, `2025/26`).
 
 ## In this repo
 
-The chat assistant exposes a `web_search` tool (`src/lib/fpl/web-search.ts`, wired in `src/lib/fpl/tools.ts`):
+The chat assistant exposes `web_search` (`src/lib/fpl/web-search.ts`, wired in `src/lib/fpl/tools.ts`):
 
-1. Prefer that tool from the FPL Assistant chat agent.
-2. Provider order: optional `TAVILY_API_KEY` → DuckDuckGo HTML → Google News RSS → Wikipedia.
-3. Cite result titles/URLs and distinguish rumor vs confirmed club/league reporting.
+1. It calls Moonshot's official Formula tool `moonshot/web-search:latest` with the same `MOONSHOT_API_KEY` as chat.
+2. Prefer that tool from the FPL Assistant chat agent for news/context.
+3. Cite sources when the tool result includes them; distinguish rumor vs confirmed club/league reporting.
 4. After news findings, re-check API availability fields (`status`, `chance_of_playing_*`, `news`) before giving transfer/captain advice.
 
 ## Coding agents
 
-When developing or verifying search behavior outside the chat UI, run unit tests in `src/lib/fpl/web-search.test.ts` and exercise:
+When developing or verifying search behavior:
 
 ```bash
 pnpm test
+```
+
+Moonshot Formula contract (for debugging):
+
+```bash
+curl -sS -X POST "${MOONSHOT_BASE_URL:-https://api.moonshot.ai/v1}/formulas/moonshot/web-search:latest/fibers" \
+  -H "Authorization: Bearer $MOONSHOT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"web_search","arguments":"{\"query\":\"Salah injury FPL\"}"}'
 ```

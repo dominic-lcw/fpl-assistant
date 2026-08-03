@@ -30,7 +30,7 @@ KIMI_MODEL=kimi-k3
 AUTH_SECRET=          # openssl rand -base64 32
 AUTH_GOOGLE_ID=       # Google OAuth client ID
 AUTH_GOOGLE_SECRET=   # Google OAuth client secret
-DATABASE_URL=         # PostgreSQL connection URL
+DATABASE_URL=         # same Cloud SQL DB via Auth Proxy (see below)
 ADMIN_EMAILS=you@gmail.com
 AUTH_TRUST_HOST=true
 ```
@@ -39,11 +39,24 @@ First-time Google sign-ins are stored as `pending`. Set `ADMIN_EMAILS` to one
 or more comma-separated bootstrap administrator emails; administrators can
 approve, reject, revoke, or restore accounts at `/admin`.
 
-Run database migrations after setting `DATABASE_URL`:
+### Local + Cloud Run share one Cloud SQL database
+
+Install [Cloud SQL Auth Proxy](https://cloud.google.com/sql/docs/postgres/connect-auth-proxy), then:
 
 ```bash
-pnpm db:migrate
+# terminal 1 — tunnels Cloud SQL to 127.0.0.1:5432
+pnpm db:proxy
+
+# .env.local (same DB user/password as Cloud SQL)
+DATABASE_URL=postgresql://fpl_assistant:YOUR_DB_PASSWORD@127.0.0.1:5432/fpl_assistant
+
+# terminal 2
+pnpm db:migrate   # once, or after new migrations
+pnpm dev
 ```
+
+Your Google account needs `roles/cloudsql.client` on the project (or equivalent).
+Cloud Run uses a Unix-socket `DATABASE_URL` instead; see `.env.example`.
 
 ### Google OAuth client (local)
 
@@ -71,6 +84,7 @@ squad, captain, or transfer advice. Conversations are saved per approved account
 - `pnpm typecheck` — TypeScript check
 - `pnpm db:generate` — generate a new Drizzle migration after schema changes
 - `pnpm db:migrate` — apply committed Drizzle migrations
+- `pnpm db:proxy` — Cloud SQL Auth Proxy for local access to the shared DB
 
 ## Finding your Manager ID
 

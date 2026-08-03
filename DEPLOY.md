@@ -107,6 +107,7 @@ export DB_USER=fpl_assistant
 
 gcloud sql instances create "$DB_INSTANCE" \
   --database-version=POSTGRES_16 \
+  --edition=ENTERPRISE \
   --tier=db-f1-micro \
   --region="$REGION" \
   --storage-size=10GB \
@@ -117,12 +118,13 @@ gcloud sql databases create "$DB_NAME" --instance="$DB_INSTANCE"
 gcloud sql users create "$DB_USER" --instance="$DB_INSTANCE" --password='CHOOSE_A_STRONG_PASSWORD'
 ```
 
-Store a connection URL for the database user as `DATABASE_URL` in Secret
-Manager (use your organization’s approved Cloud SQL connector or pooler
-format). Run migrations from a trusted machine with that URL available:
+### Cloud Run `DATABASE_URL` (Unix socket)
 
 ```bash
-pnpm db:migrate
+export DB_PASSWORD='CHOOSE_A_STRONG_PASSWORD'
+export DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@/${DB_NAME}?host=/cloudsql/${PROJECT_ID}:${REGION}:${DB_INSTANCE}"
+printf '%s' "$DATABASE_URL" | gcloud secrets create DATABASE_URL --data-file=-
+# or: gcloud secrets versions add DATABASE_URL --data-file=-
 ```
 
 The Cloud Run service account needs the Cloud SQL Client role:
@@ -132,6 +134,24 @@ gcloud projects add-iam-policy-binding "$PROJECT_ID" \
   --member="serviceAccount:${RUNTIME_SA}" \
   --role="roles/cloudsql.client"
 ```
+
+### Local `DATABASE_URL` (same instance via Auth Proxy)
+
+Install [Cloud SQL Auth Proxy](https://cloud.google.com/sql/docs/postgres/connect-auth-proxy), grant your user `roles/cloudsql.client`, then:
+
+```bash
+# terminal 1
+pnpm db:proxy
+
+# .env.local
+DATABASE_URL=postgresql://fpl_assistant:CHOOSE_A_STRONG_PASSWORD@127.0.0.1:5432/fpl_assistant
+
+# terminal 2 — migrate once against the shared DB
+pnpm db:migrate
+pnpm dev
+```
+
+Local and Cloud Run then read/write the same users, approvals, and chat history.
 
 ## 5. Build locally and push
 

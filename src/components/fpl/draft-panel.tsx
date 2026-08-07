@@ -226,7 +226,7 @@ function ThesisRailSection() {
           <ul className="flex flex-col gap-1.5">
             {activeThesis.beliefs.map((belief) => (
               <li key={belief.id || belief.elementId}>
-                <BeliefCard belief={belief} compact />
+                <BeliefCard belief={belief} />
               </li>
             ))}
           </ul>

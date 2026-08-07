@@ -181,42 +181,51 @@ export function ManagerProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function ManagerIdBar({ authSlot }: { authSlot?: ReactNode }) {
+export function ManagerIdBar({
+  authSlot,
+  leadingSlot,
+}: {
+  authSlot?: ReactNode;
+  leadingSlot?: ReactNode;
+}) {
   const { managerId, loading, error, setManagerId } = useManagerContext();
 
   return (
     <header className="bg-background/90 border-border border-b px-4 py-2 backdrop-blur">
       <div className="flex items-center justify-between gap-3">
-        <form
-          className="flex items-center gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const form = new FormData(e.currentTarget);
-            const value = String(form.get("managerId") ?? "");
-            void setManagerId(value);
-          }}
-        >
-          <label className="sr-only" htmlFor="manager-id">
-            Manager ID
-          </label>
-          <input
-            id="manager-id"
-            name="managerId"
-            key={managerId ?? "empty"}
-            inputMode="numeric"
-            pattern="[0-9]*"
-            placeholder="Manager ID"
-            defaultValue={managerId ?? ""}
-            className="border-input bg-background text-foreground focus:border-ring h-9 w-40 rounded-lg border px-3 text-sm outline-none"
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            className="bg-primary text-primary-foreground hover:bg-primary/80 h-9 rounded-lg px-3 text-sm font-medium transition disabled:opacity-60"
+        <div className="flex min-w-0 items-center gap-2">
+          {leadingSlot}
+          <form
+            className="flex min-w-0 items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const form = new FormData(e.currentTarget);
+              const value = String(form.get("managerId") ?? "");
+              void setManagerId(value);
+            }}
           >
-            {loading ? "Saving…" : "Save"}
-          </button>
-        </form>
+            <label className="sr-only" htmlFor="manager-id">
+              Manager ID
+            </label>
+            <input
+              id="manager-id"
+              name="managerId"
+              key={managerId ?? "empty"}
+              inputMode="numeric"
+              pattern="[0-9]*"
+              placeholder="Manager ID"
+              defaultValue={managerId ?? ""}
+              className="border-input bg-background text-foreground focus:border-ring h-9 w-28 min-w-0 rounded-lg border px-3 text-sm outline-none sm:w-40"
+            />
+            <button
+              type="submit"
+              disabled={loading}
+              className="bg-primary text-primary-foreground hover:bg-primary/80 h-9 rounded-lg px-3 text-sm font-medium transition disabled:opacity-60"
+            >
+              {loading ? "Saving…" : "Save"}
+            </button>
+          </form>
+        </div>
         {authSlot}
       </div>
       {error ? (

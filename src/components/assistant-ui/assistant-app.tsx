@@ -11,7 +11,10 @@ import {
 } from "@assistant-ui/react-ai-sdk";
 import { lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { Thread } from "@/components/assistant-ui/thread";
-import { ThreadList } from "@/components/assistant-ui/thread-list";
+import {
+  MobileThreadList,
+  ThreadList,
+} from "@/components/assistant-ui/thread-list";
 import { threadListAdapter } from "@/components/assistant-ui/thread-adapter";
 import {
   ModelProvider,
@@ -52,7 +55,10 @@ function AssistantRuntimeShell({ authSlot }: { authSlot?: ReactNode }) {
         <div className="flex h-dvh overflow-hidden">
           <ThreadList />
           <div className="flex min-w-0 flex-1 flex-col">
-            <ManagerIdBar authSlot={authSlot} />
+            <ManagerIdBar
+              authSlot={authSlot}
+              leadingSlot={<MobileThreadList />}
+            />
             <main className="min-h-0 flex-1">
               <Thread />
             </main>

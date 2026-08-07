@@ -184,9 +184,11 @@ export function ManagerProvider({ children }: { children: ReactNode }) {
 export function ManagerIdBar({
   authSlot,
   leadingSlot,
+  trailingSlot,
 }: {
   authSlot?: ReactNode;
   leadingSlot?: ReactNode;
+  trailingSlot?: ReactNode;
 }) {
   const { managerId, loading, error, setManagerId } = useManagerContext();
 
@@ -226,7 +228,10 @@ export function ManagerIdBar({
             </button>
           </form>
         </div>
-        {authSlot}
+        <div className="flex shrink-0 items-center gap-2">
+          {trailingSlot}
+          {authSlot}
+        </div>
       </div>
       {error ? (
         <p className="text-destructive mt-1.5 text-sm">{error}</p>

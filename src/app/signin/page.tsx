@@ -9,7 +9,7 @@ type SignInPageProps = {
 export default async function SignInPage({ searchParams }: SignInPageProps) {
   const session = await auth();
   if (session?.user) {
-    redirect("/");
+    redirect(session.user.status === "approved" ? "/" : "/pending");
   }
 
   const { error } = await searchParams;
@@ -22,14 +22,14 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
             FPL Assistant
           </h1>
           <p className="text-muted-foreground text-sm">
-            Sign in with Google to continue. Access is limited to an allowlisted
-            email.
+            Sign in with Google to request access. An administrator must approve
+            your account before you can use the app.
           </p>
         </div>
 
         {error === "AccessDenied" ? (
           <p className="text-destructive text-sm" role="alert">
-            Your Google account is not allowed to access this app.
+            Your Google account could not be used to sign in.
           </p>
         ) : error ? (
           <p className="text-destructive text-sm" role="alert">

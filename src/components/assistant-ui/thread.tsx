@@ -299,19 +299,6 @@ const AssistantMessage: FC = () => {
             return null;
           }}
         </MessagePrimitive.Parts>
-        <AuiIf
-          condition={(s) =>
-            s.message.status?.type === "running" && s.message.parts.length === 0
-          }
-        >
-          <span
-            data-slot="aui_assistant-message-indicator"
-            className="animate-pulse font-sans"
-            aria-label="Assistant is working"
-          >
-            {"●"}
-          </span>
-        </AuiIf>
         <MessageError />
       </div>
 

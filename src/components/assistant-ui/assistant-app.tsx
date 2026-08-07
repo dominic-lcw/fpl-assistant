@@ -1,36 +1,72 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { AssistantRuntimeProvider } from "@assistant-ui/react";
+import { useMemo, type ReactNode } from "react";
+import {
+  AssistantRuntimeProvider,
+  useRemoteThreadListRuntime,
+} from "@assistant-ui/react";
 import {
   AssistantChatTransport,
   useChatRuntime,
 } from "@assistant-ui/react-ai-sdk";
 import { lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { Thread } from "@/components/assistant-ui/thread";
+import { ThreadList } from "@/components/assistant-ui/thread-list";
+import { threadListAdapter } from "@/components/assistant-ui/thread-adapter";
+import {
+  ModelProvider,
+  useModelSelection,
+} from "@/components/assistant-ui/model-picker";
 import {
   ManagerIdBar,
   ManagerProvider,
 } from "@/components/fpl/manager-context";
 
-export function AssistantApp({ authSlot }: { authSlot?: ReactNode }) {
-  const runtime = useChatRuntime({
+function useThreadRuntime() {
+  const { modelId } = useModelSelection();
+
+  const transport = useMemo(
+    () =>
+      new AssistantChatTransport({
+        api: "/api/chat",
+        body: { model: modelId },
+      }),
+    [modelId],
+  );
+
+  return useChatRuntime({
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
-    transport: new AssistantChatTransport({
-      api: "/api/chat",
-    }),
+    transport,
+  });
+}
+
+function AssistantRuntimeShell({ authSlot }: { authSlot?: ReactNode }) {
+  const runtime = useRemoteThreadListRuntime({
+    adapter: threadListAdapter,
+    runtimeHook: useThreadRuntime,
   });
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <ManagerProvider>
-        <div className="flex h-dvh flex-col overflow-hidden">
-          <ManagerIdBar authSlot={authSlot} />
-          <main className="min-h-0 flex-1">
-            <Thread />
-          </main>
+        <div className="flex h-dvh overflow-hidden">
+          <ThreadList />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <ManagerIdBar authSlot={authSlot} />
+            <main className="min-h-0 flex-1">
+              <Thread />
+            </main>
+          </div>
         </div>
       </ManagerProvider>
     </AssistantRuntimeProvider>
+  );
+}
+
+export function AssistantApp({ authSlot }: { authSlot?: ReactNode }) {
+  return (
+    <ModelProvider>
+      <AssistantRuntimeShell authSlot={authSlot} />
+    </ModelProvider>
   );
 }

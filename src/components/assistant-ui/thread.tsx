@@ -3,7 +3,9 @@ import {
   ComposerAttachments,
   UserMessageAttachments,
 } from "@/components/assistant-ui/attachment";
+import { ContextDisplay } from "@/components/assistant-ui/context-display";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
+import { ModelPicker, useModelSelection } from "@/components/assistant-ui/model-picker";
 import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { Button } from "@/components/ui/button";
@@ -188,9 +190,15 @@ const Composer: FC = () => {
 };
 
 const ComposerAction: FC = () => {
+  const { contextWindow } = useModelSelection();
+
   return (
-    <div className="aui-composer-action-wrapper relative flex items-center justify-between">
-      <ComposerAddAttachment />
+    <div className="aui-composer-action-wrapper relative flex items-center justify-between gap-2">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <ComposerAddAttachment />
+        <ModelPicker />
+        <ContextDisplay.Ring modelContextWindow={contextWindow} side="top" />
+      </div>
       <div className="flex items-center gap-1.5">
         <AuiIf condition={(s) => s.thread.capabilities.dictation}>
           <AuiIf condition={(s) => s.composer.dictation == null}>

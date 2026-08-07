@@ -70,13 +70,17 @@ export const threadListAdapter: RemoteThreadListAdapter = {
       title: thread.title ?? undefined,
     };
   },
-  async generateTitle(remoteId) {
-    const title = "New conversation";
-    await fetchJson(`/api/threads/${remoteId}`, {
-      method: "PATCH",
-      body: JSON.stringify({ title }),
+  async generateTitle(remoteId, messages) {
+    return createAssistantStream(async (controller) => {
+      const { title } = await fetchJson<{ title: string }>(
+        `/api/threads/${remoteId}/title`,
+        {
+          method: "POST",
+          body: JSON.stringify({ messages }),
+        },
+      );
+      controller.appendText(title);
     });
-    return createAssistantStream((controller) => controller.appendText(title));
   },
   unstable_Provider: ThreadHistoryProvider,
 };

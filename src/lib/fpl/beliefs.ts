@@ -1,7 +1,7 @@
 import { and, desc, eq, gt, isNull, or } from "drizzle-orm";
 
 import { db } from "@/db";
-import { playerBeliefs } from "@/db/schema";
+import { formTheses, playerBeliefs } from "@/db/schema";
 
 /** Cap |formBelief| stored and used in scoring. */
 export const MAX_ABS_FORM_BELIEF = 2;
@@ -22,6 +22,7 @@ export type PlayerBeliefAdjustment = {
 
 export type PlayerBeliefView = {
   id: string;
+  thesisId: string;
   elementId: number;
   formBelief: number;
   minutesRisk: number;
@@ -35,6 +36,10 @@ export type PlayerBeliefView = {
   createdAt: string;
   updatedAt: string;
   beliefDelta: number;
+  /** Optional enrichment for UI / tools. */
+  name?: string;
+  team?: string;
+  position?: string;
 };
 
 export type PlayerBeliefRow = typeof playerBeliefs.$inferSelect;
@@ -67,6 +72,7 @@ export function serializeBelief(row: PlayerBeliefRow): PlayerBeliefView {
   const confidence = Number(row.confidence);
   return {
     id: row.id,
+    thesisId: row.thesisId,
     elementId: row.elementId,
     formBelief,
     minutesRisk,
@@ -92,37 +98,54 @@ function defaultExpiresAt(horizonGw: number, from = new Date()): Date {
   return new Date(from.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
-function activeBeliefWhere(userId: string, now = new Date()) {
+function thesisBeliefWhere(
+  userId: string,
+  thesisId: string,
+  now = new Date(),
+) {
   return and(
     eq(playerBeliefs.userId, userId),
+    eq(playerBeliefs.thesisId, thesisId),
     or(isNull(playerBeliefs.expiresAt), gt(playerBeliefs.expiresAt, now)),
   );
 }
 
-export async function listActiveUserBeliefs(userId: string, limit = 50) {
+export async function listBeliefsForThesis(
+  userId: string,
+  thesisId: string,
+  limit = 50,
+) {
   return db
     .select()
     .from(playerBeliefs)
-    .where(activeBeliefWhere(userId))
+    .where(thesisBeliefWhere(userId, thesisId))
     .orderBy(desc(playerBeliefs.updatedAt))
     .limit(limit);
 }
 
-export async function getActiveUserBelief(userId: string, elementId: number) {
+export async function getBeliefForThesis(
+  userId: string,
+  thesisId: string,
+  elementId: number,
+) {
   const [row] = await db
     .select()
     .from(playerBeliefs)
     .where(
-      and(activeBeliefWhere(userId), eq(playerBeliefs.elementId, elementId)),
+      and(
+        thesisBeliefWhere(userId, thesisId),
+        eq(playerBeliefs.elementId, elementId),
+      ),
     )
     .limit(1);
   return row ?? null;
 }
 
-export async function getActiveBeliefMap(
+export async function getBeliefMapForThesis(
   userId: string,
+  thesisId: string,
 ): Promise<Map<number, PlayerBeliefAdjustment>> {
-  const rows = await listActiveUserBeliefs(userId, 200);
+  const rows = await listBeliefsForThesis(userId, thesisId, 200);
   const map = new Map<number, PlayerBeliefAdjustment>();
   for (const row of rows) {
     map.set(row.elementId, {
@@ -136,6 +159,7 @@ export async function getActiveBeliefMap(
 
 export async function upsertUserPlayerBelief(params: {
   userId: string;
+  thesisId: string;
   elementId: number;
   formBelief: number;
   minutesRisk?: number;
@@ -167,6 +191,7 @@ export async function upsertUserPlayerBelief(params: {
   const values = {
     id: crypto.randomUUID(),
     userId: params.userId,
+    thesisId: params.thesisId,
     elementId: params.elementId,
     formBelief,
     minutesRisk,
@@ -185,7 +210,7 @@ export async function upsertUserPlayerBelief(params: {
     .insert(playerBeliefs)
     .values(values)
     .onConflictDoUpdate({
-      target: [playerBeliefs.userId, playerBeliefs.elementId],
+      target: [playerBeliefs.thesisId, playerBeliefs.elementId],
       set: {
         formBelief: values.formBelief,
         minutesRisk: values.minutesRisk,
@@ -201,11 +226,26 @@ export async function upsertUserPlayerBelief(params: {
     })
     .returning();
 
+  // Keep thesis working + reopen collection if a new belief arrives after synthesis.
+  await db
+    .update(formTheses)
+    .set({
+      updatedAt: now,
+      status: "collecting",
+    })
+    .where(
+      and(
+        eq(formTheses.id, params.thesisId),
+        eq(formTheses.userId, params.userId),
+      ),
+    );
+
   return row;
 }
 
 export async function clearUserPlayerBelief(
   userId: string,
+  thesisId: string,
   elementId: number,
 ) {
   const deleted = await db
@@ -213,12 +253,14 @@ export async function clearUserPlayerBelief(
     .where(
       and(
         eq(playerBeliefs.userId, userId),
+        eq(playerBeliefs.thesisId, thesisId),
         eq(playerBeliefs.elementId, elementId),
       ),
     )
     .returning({
       id: playerBeliefs.id,
       elementId: playerBeliefs.elementId,
+      thesisId: playerBeliefs.thesisId,
     });
   return deleted[0] ?? null;
 }

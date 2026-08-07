@@ -39,6 +39,17 @@ import {
   GetSuggestionsToolUI,
 } from "@/components/fpl/suggestions-tool-ui";
 import {
+  ClearPlayerBeliefToolUI,
+  CreateFormThesisToolUI,
+  GetFormThesisToolUI,
+  GetPlayerBeliefToolUI,
+  ListFormThesesToolUI,
+  ListPlayerBeliefsToolUI,
+  SynthesizeFormThesisToolUI,
+  UpsertPlayerBeliefToolUI,
+} from "@/components/fpl/beliefs-tool-ui";
+import { ThesisProvider } from "@/components/fpl/thesis-context";
+import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
@@ -108,22 +119,32 @@ function AssistantRuntimeShell({ authSlot }: { authSlot?: ReactNode }) {
     <AssistantRuntimeProvider runtime={runtime}>
       <ManagerProvider>
         <DraftProvider>
-          <AskUserChoicesTool />
-          <SuggestSquadToolSync />
-          <GetSquadDraftToolSync />
-          <GetSuggestionsToolUI />
-          <ComparePlayersToolUI />
-          <div className="flex h-dvh overflow-hidden">
-            <ThreadList />
-            <div className="flex min-w-0 flex-1 flex-col">
-              <ManagerIdBar
-                authSlot={authSlot}
-                leadingSlot={<MobileThreadList />}
-                trailingSlot={<MobileDraftPanel />}
-              />
-              <ChatWithDraftRail />
+          <ThesisProvider>
+            <AskUserChoicesTool />
+            <SuggestSquadToolSync />
+            <GetSquadDraftToolSync />
+            <GetSuggestionsToolUI />
+            <ComparePlayersToolUI />
+            <CreateFormThesisToolUI />
+            <ListFormThesesToolUI />
+            <GetFormThesisToolUI />
+            <SynthesizeFormThesisToolUI />
+            <UpsertPlayerBeliefToolUI />
+            <ListPlayerBeliefsToolUI />
+            <GetPlayerBeliefToolUI />
+            <ClearPlayerBeliefToolUI />
+            <div className="flex h-dvh overflow-hidden">
+              <ThreadList />
+              <div className="flex min-w-0 flex-1 flex-col">
+                <ManagerIdBar
+                  authSlot={authSlot}
+                  leadingSlot={<MobileThreadList />}
+                  trailingSlot={<MobileDraftPanel />}
+                />
+                <ChatWithDraftRail />
+              </div>
             </div>
-          </div>
+          </ThesisProvider>
         </DraftProvider>
       </ManagerProvider>
     </AssistantRuntimeProvider>

@@ -1,5 +1,5 @@
 import { getApprovedUser } from "@/lib/access";
-import { getActiveBeliefMap } from "@/lib/fpl/beliefs";
+import { getActiveBeliefMap } from "@/lib/fpl/theses";
 import {
   listUserDrafts,
   saveBuiltSquadDraft,

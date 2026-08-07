@@ -10,9 +10,8 @@ import {
 } from "./analysis";
 import {
   clearUserPlayerBelief,
-  getActiveBeliefMap,
-  getActiveUserBelief,
-  listActiveUserBeliefs,
+  getBeliefForThesis,
+  listBeliefsForThesis,
   MAX_ABS_FORM_BELIEF,
   serializeBelief,
   upsertUserPlayerBelief,
@@ -45,6 +44,18 @@ import {
   researchTargetsFromSuggestions,
   toCompactSuggestionPlayer,
 } from "./suggestion-evidence";
+import {
+  archiveFormThesis,
+  createFormThesis,
+  getActiveBeliefMap,
+  getActiveThesis,
+  getThesisWithBeliefs,
+  getUserThesis,
+  listUserTheses,
+  markThesisApplied,
+  serializeThesis,
+  synthesizeFormThesis,
+} from "./theses";
 import {
   gameweekIdSchema,
   leagueIdSchema,
@@ -409,9 +420,11 @@ export function createFplTools(options?: {
             return { error: `Player ${playerId} was not found.` };
           }
           const gw = getRelevantGameweek(bootstrap);
-          const belief = userId
-            ? await getActiveUserBelief(userId, playerId)
-            : null;
+          const activeThesis = userId ? await getActiveThesis(userId) : null;
+          const belief =
+            userId && activeThesis
+              ? await getBeliefForThesis(userId, activeThesis.id, playerId)
+              : null;
           const summary = buildPlayerFormSummary(
             element,
             bootstrap,
@@ -429,6 +442,7 @@ export function createFplTools(options?: {
           return {
             player: compactPlayer(summary),
             belief: belief ? serializeBelief(belief) : null,
+            thesisId: activeThesis?.id ?? null,
             recentHistory: detail.history.slice(-6).map((h) => ({
               round: h.round,
               opponent: bootstrap.teams.find((t) => t.id === h.opponent_team)
@@ -606,7 +620,7 @@ export function createFplTools(options?: {
 
     suggest_squad: tool({
       description:
-        "Build a legal 15-player FPL squad (2 GKP, 5 DEF, 5 MID, 3 FWD, max 3 per club) using form, xGI, fixture difficulty, and the signed-in user's private form beliefs. Modes: draft_100 (£100.0m blank slate) or wildcard (manager team value + bank). Optionally persist the draft for the signed-in user in Postgres.",
+        "Build a legal 15-player FPL squad (2 GKP, 5 DEF, 5 MID, 3 FWD, max 3 per club) using form, xGI, fixture difficulty, and beliefs from the signed-in user's active form thesis. Prefer synthesize_form_thesis first. Modes: draft_100 (£100.0m blank slate) or wildcard (manager team value + bank). Optionally persist the draft.",
       inputSchema: z.object({
         mode: z
           .enum(["draft_100", "wildcard"])
@@ -627,8 +641,14 @@ export function createFplTools(options?: {
           .max(120)
           .optional()
           .describe("Title when saving the draft."),
+        force: z
+          .boolean()
+          .optional()
+          .describe(
+            "If true, build even when the active thesis is still collecting (skips synthesis gate).",
+          ),
       }),
-      execute: async ({ mode, managerId, gameweek, save, title }) =>
+      execute: async ({ mode, managerId, gameweek, save, title, force }) =>
         runFplTool(async () => {
           const [bootstrap, fixtures] = await Promise.all([
             getBootstrapStatic(),
@@ -665,6 +685,28 @@ export function createFplTools(options?: {
           }
 
           const beliefs = userId ? await getActiveBeliefMap(userId) : undefined;
+          const activeThesis = userId ? await getActiveThesis(userId) : null;
+          if (
+            activeThesis &&
+            activeThesis.status === "collecting" &&
+            !force
+          ) {
+            const packed = await getThesisWithBeliefs(
+              userId!,
+              activeThesis.id,
+            );
+            return {
+              error:
+                "Active form thesis is still collecting beliefs. Call synthesize_form_thesis with a summary first, then suggest_squad. Pass force=true only if the user insists on building before synthesis.",
+              thesis: packed?.thesis ?? serializeThesis(activeThesis),
+              nextSteps: [
+                "Review beliefs with list_player_beliefs / get_form_thesis",
+                "Call synthesize_form_thesis with a clear summary of the thesis",
+                "Then call suggest_squad again",
+              ],
+            };
+          }
+
           const built = buildLegalSquad({
             bootstrap,
             fixtures,
@@ -703,6 +745,19 @@ export function createFplTools(options?: {
               managerId: resolvedManagerId ?? null,
             });
             saved = serializeDraft(row);
+            if (activeThesis) {
+              await markThesisApplied({
+                userId,
+                thesisId: activeThesis.id,
+                linkedDraftId: row.id,
+              });
+            }
+          } else if (activeThesis && activeThesis.status === "synthesized") {
+            await markThesisApplied({
+              userId: userId!,
+              thesisId: activeThesis.id,
+              linkedDraftId: activeThesis.linkedDraftId,
+            });
           }
 
           return {
@@ -716,6 +771,8 @@ export function createFplTools(options?: {
             averageScore: built.averageScore,
             managerId: resolvedManagerId,
             activeBeliefCount: beliefs?.size ?? 0,
+            thesisId: activeThesis?.id ?? null,
+            thesisStatus: activeThesis?.status ?? null,
             picks: built.picks.map(compactDraftPick),
             saved,
             rules: {
@@ -724,7 +781,7 @@ export function createFplTools(options?: {
               formationHint: "XI suggested as 4-4-2; positions 12–15 are bench",
             },
             disclaimer:
-              "Heuristic squad from form, xGI, availability, fixture difficulty, and your private form beliefs. Validate before locking in FPL.",
+              "Heuristic squad from form, xGI, availability, fixture difficulty, and the active form thesis beliefs. Validate before locking in FPL.",
           };
         }),
     }),
@@ -802,9 +859,14 @@ export function createFplTools(options?: {
 
     upsert_player_belief: tool({
       description:
-        "Create or update the signed-in user's private form belief for one player. Beliefs adjust recommendation scores used by get_suggestions and suggest_squad. Never invent beliefs without API or web evidence; cite sources in rationale.",
+        "Add or update one player belief inside a form thesis (defaults to the active thesis). Beliefs are the atomic units of a thesis and adjust recommendation scores. Never invent beliefs without API or web evidence.",
       inputSchema: z.object({
         playerId: playerIdSchema,
+        thesisId: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("Defaults to the active working thesis."),
         formBelief: z
           .number()
           .min(-MAX_ABS_FORM_BELIEF)
@@ -846,6 +908,7 @@ export function createFplTools(options?: {
       }),
       execute: async ({
         playerId,
+        thesisId,
         formBelief,
         minutesRisk,
         confidence,
@@ -861,6 +924,18 @@ export function createFplTools(options?: {
               error: "No signed-in user available for private belief storage.",
             };
           }
+          const thesis = thesisId
+            ? await getUserThesis(userId, thesisId)
+            : await getActiveThesis(userId);
+          if (!thesis) {
+            return {
+              error:
+                "No active form thesis. Call create_form_thesis first, then upsert beliefs into it.",
+            };
+          }
+          if (thesis.status === "archived") {
+            return { error: "Cannot add beliefs to an archived thesis." };
+          }
           const bootstrap = await getBootstrapStatic();
           const element = bootstrap.elements.find((e) => e.id === playerId);
           if (!element) {
@@ -868,6 +943,7 @@ export function createFplTools(options?: {
           }
           const row = await upsertUserPlayerBelief({
             userId,
+            thesisId: thesis.id,
             elementId: playerId,
             formBelief,
             minutesRisk,
@@ -878,118 +954,342 @@ export function createFplTools(options?: {
             rationale,
             sources,
           });
-          const belief = serializeBelief(row);
+          const belief = {
+            ...serializeBelief(row),
+            name: element.web_name,
+            team: bootstrap.teams.find((t) => t.id === element.team)?.short_name,
+            position: bootstrap.element_types.find(
+              (t) => t.id === element.element_type,
+            )?.singular_name_short,
+          };
           return {
+            thesis: serializeThesis(thesis, { beliefCount: undefined }),
             player: {
               id: element.id,
               name: element.web_name,
-              team: bootstrap.teams.find((t) => t.id === element.team)
-                ?.short_name,
+              team: belief.team,
               status: element.status,
               form: Number(element.form),
             },
             belief,
-            note: "Belief is private to this user and will adjust scores in get_suggestions / suggest_squad.",
+            note: "Belief stored on this thesis. Adding beliefs sets thesis status back to collecting until synthesize_form_thesis.",
           };
         }),
     }),
 
     list_player_beliefs: tool({
       description:
-        "List the signed-in user's active private player form beliefs (most recently updated first).",
+        "List player beliefs for a form thesis (defaults to the active thesis). Each belief is shown as a structured card in the UI.",
       inputSchema: z.object({
+        thesisId: z.string().min(1).optional(),
         limit: z.number().int().min(1).max(100).optional(),
       }),
-      execute: async ({ limit = 30 }) =>
+      execute: async ({ thesisId, limit = 30 }) =>
         runFplTool(async () => {
           if (!userId) {
             return {
               error: "No signed-in user available for private belief storage.",
             };
           }
+          const thesis = thesisId
+            ? await getUserThesis(userId, thesisId)
+            : await getActiveThesis(userId);
+          if (!thesis) {
+            return {
+              error: "No active form thesis. Call create_form_thesis first.",
+              beliefs: [],
+            };
+          }
           const [rows, bootstrap] = await Promise.all([
-            listActiveUserBeliefs(userId, limit),
+            listBeliefsForThesis(userId, thesis.id, limit),
             getBootstrapStatic(),
           ]);
           const byId = new Map(bootstrap.elements.map((e) => [e.id, e]));
+          const beliefs = rows.map((row) => {
+            const belief = serializeBelief(row);
+            const element = byId.get(row.elementId);
+            return {
+              ...belief,
+              name: element?.web_name ?? String(row.elementId),
+              team: element
+                ? bootstrap.teams.find((t) => t.id === element.team)?.short_name
+                : undefined,
+              position: element
+                ? bootstrap.element_types.find(
+                    (t) => t.id === element.element_type,
+                  )?.singular_name_short
+                : undefined,
+            };
+          });
           return {
-            beliefs: rows.map((row) => {
-              const belief = serializeBelief(row);
-              const element = byId.get(row.elementId);
-              return {
-                ...belief,
-                name: element?.web_name ?? String(row.elementId),
-                team: element
-                  ? bootstrap.teams.find((t) => t.id === element.team)?.short_name
-                  : undefined,
-                position: element
-                  ? bootstrap.element_types.find(
-                      (t) => t.id === element.element_type,
-                    )?.singular_name_short
-                  : undefined,
-              };
-            }),
+            thesis: serializeThesis(thesis, { beliefCount: beliefs.length }),
+            beliefs,
           };
         }),
     }),
 
     get_player_belief: tool({
       description:
-        "Fetch the signed-in user's active private form belief for one player, including the score delta applied in construction.",
+        "Fetch one player belief from a form thesis (defaults to active), including the score delta applied in construction.",
       inputSchema: z.object({
         playerId: playerIdSchema,
+        thesisId: z.string().min(1).optional(),
       }),
-      execute: async ({ playerId }) =>
+      execute: async ({ playerId, thesisId }) =>
         runFplTool(async () => {
           if (!userId) {
             return {
               error: "No signed-in user available for private belief storage.",
             };
           }
-          const row = await getActiveUserBelief(userId, playerId);
-          if (!row) {
+          const thesis = thesisId
+            ? await getUserThesis(userId, thesisId)
+            : await getActiveThesis(userId);
+          if (!thesis) {
             return {
               playerId,
               belief: null,
-              note: "No active belief for this player.",
+              note: "No active form thesis.",
+            };
+          }
+          const row = await getBeliefForThesis(userId, thesis.id, playerId);
+          if (!row) {
+            return {
+              thesisId: thesis.id,
+              playerId,
+              belief: null,
+              note: "No belief for this player on the thesis.",
             };
           }
           const bootstrap = await getBootstrapStatic();
           const element = bootstrap.elements.find((e) => e.id === playerId);
+          const belief = {
+            ...serializeBelief(row),
+            name: element?.web_name,
+            team: element
+              ? bootstrap.teams.find((t) => t.id === element.team)?.short_name
+              : undefined,
+            position: element
+              ? bootstrap.element_types.find(
+                  (t) => t.id === element.element_type,
+                )?.singular_name_short
+              : undefined,
+          };
           return {
+            thesis: serializeThesis(thesis),
             player: element
               ? {
                   id: element.id,
                   name: element.web_name,
-                  team: bootstrap.teams.find((t) => t.id === element.team)
-                    ?.short_name,
+                  team: belief.team,
                   form: Number(element.form),
                   status: element.status,
                 }
               : { id: playerId },
-            belief: serializeBelief(row),
+            belief,
           };
         }),
     }),
 
     clear_player_belief: tool({
       description:
-        "Delete the signed-in user's private form belief for one player (e.g. after injury news flips or the prior expires).",
+        "Delete one player belief from a form thesis (defaults to the active thesis).",
       inputSchema: z.object({
         playerId: playerIdSchema,
+        thesisId: z.string().min(1).optional(),
       }),
-      execute: async ({ playerId }) =>
+      execute: async ({ playerId, thesisId }) =>
         runFplTool(async () => {
           if (!userId) {
             return {
               error: "No signed-in user available for private belief storage.",
             };
           }
-          const deleted = await clearUserPlayerBelief(userId, playerId);
+          const thesis = thesisId
+            ? await getUserThesis(userId, thesisId)
+            : await getActiveThesis(userId);
+          if (!thesis) {
+            return { error: "No active form thesis." };
+          }
+          const deleted = await clearUserPlayerBelief(
+            userId,
+            thesis.id,
+            playerId,
+          );
           if (!deleted) {
             return { error: `No belief found for player ${playerId}.` };
           }
-          return { deleted: deleted.elementId };
+          return { deleted: deleted.elementId, thesisId: thesis.id };
+        }),
+    }),
+
+    create_form_thesis: tool({
+      description:
+        "Create a named form thesis for the signed-in user. A thesis collects player beliefs; after synthesize_form_thesis, call suggest_squad to build the team. Archives other collecting/synthesized theses by default.",
+      inputSchema: z.object({
+        title: z.string().min(3).max(120),
+        gameweek: gameweekIdSchema.optional(),
+        horizonGw: z.number().int().min(1).max(10).optional(),
+        archiveOthers: z.boolean().optional(),
+      }),
+      execute: async ({ title, gameweek, horizonGw, archiveOthers }) =>
+        runFplTool(async () => {
+          if (!userId) {
+            return { error: "No signed-in user available for thesis storage." };
+          }
+          const row = await createFormThesis({
+            userId,
+            title,
+            gameweek,
+            horizonGw,
+            archiveOthers,
+          });
+          return {
+            thesis: serializeThesis(row, { beliefCount: 0, beliefs: [] }),
+            nextSteps: [
+              "Upsert player beliefs with evidence (upsert_player_belief)",
+              "Optionally ask_user_choices for risk / differential preference",
+              "Call synthesize_form_thesis, then suggest_squad",
+            ],
+          };
+        }),
+    }),
+
+    list_form_theses: tool({
+      description: "List the signed-in user's form theses (most recent first).",
+      inputSchema: z.object({
+        limit: z.number().int().min(1).max(50).optional(),
+      }),
+      execute: async ({ limit = 10 }) =>
+        runFplTool(async () => {
+          if (!userId) {
+            return { error: "No signed-in user available for thesis storage." };
+          }
+          const rows = await listUserTheses(userId, limit);
+          return {
+            theses: rows.map((row) => serializeThesis(row)),
+          };
+        }),
+    }),
+
+    get_form_thesis: tool({
+      description:
+        "Load one form thesis with all of its player beliefs for display and synthesis.",
+      inputSchema: z.object({
+        thesisId: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("Defaults to the active working thesis."),
+      }),
+      execute: async ({ thesisId }) =>
+        runFplTool(async () => {
+          if (!userId) {
+            return { error: "No signed-in user available for thesis storage." };
+          }
+          const id = thesisId ?? (await getActiveThesis(userId))?.id;
+          if (!id) {
+            return { error: "No active form thesis.", thesis: null };
+          }
+          const packed = await getThesisWithBeliefs(userId, id);
+          if (!packed) {
+            return { error: `Thesis ${id} was not found.` };
+          }
+          const bootstrap = await getBootstrapStatic();
+          const byId = new Map(bootstrap.elements.map((e) => [e.id, e]));
+          const beliefs = (packed.thesis.beliefs ?? []).map((belief) => {
+            const element = byId.get(belief.elementId);
+            return {
+              ...belief,
+              name: element?.web_name ?? String(belief.elementId),
+              team: element
+                ? bootstrap.teams.find((t) => t.id === element.team)?.short_name
+                : undefined,
+              position: element
+                ? bootstrap.element_types.find(
+                    (t) => t.id === element.element_type,
+                  )?.singular_name_short
+                : undefined,
+            };
+          });
+          return {
+            thesis: { ...packed.thesis, beliefs, beliefCount: beliefs.length },
+          };
+        }),
+    }),
+
+    synthesize_form_thesis: tool({
+      description:
+        "Write the synthesis for a form thesis (summary of beliefs + strategy) and mark it synthesized so suggest_squad can build the final team.",
+      inputSchema: z.object({
+        thesisId: z.string().min(1).optional(),
+        summary: z
+          .string()
+          .min(40)
+          .max(2000)
+          .describe(
+            "Synthesis paragraph: key beliefs, risks, and how the squad should be built.",
+          ),
+        risk: z.enum(["safe", "balanced", "differential"]).optional(),
+        budgetFlex: z.string().max(200).optional(),
+        notes: z.string().max(400).optional(),
+      }),
+      execute: async ({ thesisId, summary, risk, budgetFlex, notes }) =>
+        runFplTool(async () => {
+          if (!userId) {
+            return { error: "No signed-in user available for thesis storage." };
+          }
+          const thesis = thesisId
+            ? await getUserThesis(userId, thesisId)
+            : await getActiveThesis(userId);
+          if (!thesis) {
+            return { error: "No active form thesis to synthesize." };
+          }
+          const beliefRows = await listBeliefsForThesis(userId, thesis.id);
+          if (beliefRows.length === 0) {
+            return {
+              error:
+                "Thesis has no beliefs yet. Upsert at least one player belief before synthesizing.",
+            };
+          }
+          const result = await synthesizeFormThesis({
+            userId,
+            thesisId: thesis.id,
+            summary,
+            preferences: {
+              risk,
+              budgetFlex,
+              notes,
+            },
+          });
+          if (result.error || !result.row) {
+            return { error: result.error ?? "Synthesis failed." };
+          }
+          const packed = await getThesisWithBeliefs(userId, thesis.id);
+          return {
+            thesis: packed?.thesis ?? serializeThesis(result.row),
+            nextSteps: [
+              "Call suggest_squad (optionally save=true) to build the final team from this synthesis",
+            ],
+          };
+        }),
+    }),
+
+    archive_form_thesis: tool({
+      description: "Archive a form thesis owned by the signed-in user.",
+      inputSchema: z.object({
+        thesisId: z.string().min(1),
+      }),
+      execute: async ({ thesisId }) =>
+        runFplTool(async () => {
+          if (!userId) {
+            return { error: "No signed-in user available for thesis storage." };
+          }
+          const row = await archiveFormThesis(userId, thesisId);
+          if (!row) {
+            return { error: `Thesis ${thesisId} was not found.` };
+          }
+          return { thesis: serializeThesis(row) };
         }),
     }),
   };

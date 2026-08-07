@@ -176,8 +176,58 @@ export const squadDrafts = pgTable(
 );
 
 /**
- * Per-user agent prior on a player's near-term form.
- * Never shared across users — always scoped by userId.
+ * Named per-user form thesis: a bag of player beliefs plus a synthesis
+ * step before squad construction. Never shared across users.
+ */
+export type FormThesisStatus =
+  | "collecting"
+  | "synthesized"
+  | "applied"
+  | "archived";
+
+export type FormThesisPreferences = {
+  risk?: "safe" | "balanced" | "differential";
+  budgetFlex?: string;
+  notes?: string;
+};
+
+export const formTheses = pgTable(
+  "form_theses",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    status: text("status", {
+      enum: ["collecting", "synthesized", "applied", "archived"],
+    })
+      .notNull()
+      .default("collecting"),
+    /** Agent synthesis paragraph written before squad build. */
+    summary: text("summary"),
+    preferences: jsonb("preferences").$type<FormThesisPreferences>(),
+    gameweek: integer("gameweek"),
+    horizonGw: integer("horizon_gw").notNull().default(3),
+    linkedDraftId: text("linked_draft_id").references(() => squadDrafts.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (thesis) => [
+    index("form_theses_user_id_idx").on(thesis.userId),
+    index("form_theses_user_status_idx").on(thesis.userId, thesis.status),
+  ],
+);
+
+/**
+ * Per-user agent prior on a player's near-term form, belonging to a thesis.
+ * Never shared across users — always scoped by userId + thesisId.
  */
 export type PlayerBeliefSources = string[];
 
@@ -188,6 +238,9 @@ export const playerBeliefs = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    thesisId: text("thesis_id")
+      .notNull()
+      .references(() => formTheses.id, { onDelete: "cascade" }),
     /** FPL element / player id. */
     elementId: integer("element_id").notNull(),
     /**
@@ -218,11 +271,12 @@ export const playerBeliefs = pgTable(
       .defaultNow(),
   },
   (belief) => [
-    uniqueIndex("player_beliefs_user_element_uidx").on(
-      belief.userId,
+    uniqueIndex("player_beliefs_thesis_element_uidx").on(
+      belief.thesisId,
       belief.elementId,
     ),
     index("player_beliefs_user_id_idx").on(belief.userId),
+    index("player_beliefs_thesis_id_idx").on(belief.thesisId),
   ],
 );
 

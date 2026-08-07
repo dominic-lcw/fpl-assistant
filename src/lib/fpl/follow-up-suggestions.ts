@@ -86,6 +86,21 @@ export function buildFollowUpsFromMessages(
       prompts.push("Ask me 2 clarifying questions before finalising transfers");
     }
 
+    if (call.toolName === "upsert_player_belief" || call.toolName === "list_player_beliefs") {
+      prompts.push("Synthesize this form thesis, then build a squad from it");
+      prompts.push("Add another belief for a contested midfielder or forward");
+    }
+
+    if (call.toolName === "create_form_thesis" || call.toolName === "get_form_thesis") {
+      prompts.push("Research 3 players and upsert form beliefs into this thesis");
+      prompts.push("Ask me about risk appetite before synthesizing");
+    }
+
+    if (call.toolName === "synthesize_form_thesis") {
+      prompts.push("Build a £100m squad from this synthesized thesis and save it");
+      prompts.push("Show captain and transfer suggestions using these thesis beliefs");
+    }
+
     if (call.toolName === "suggest_squad" || call.toolName === "get_squad_draft") {
       prompts.push("Which picks look risky — check news and minutes?");
       prompts.push("Compare two expensive midfielders and propose a swap");

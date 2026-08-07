@@ -12,7 +12,7 @@ CREATE TABLE "users" (
   "updated_at" timestamp DEFAULT now() NOT NULL,
   CONSTRAINT "users_email_unique" UNIQUE("email")
 );
-
+--> statement-breakpoint
 CREATE TABLE "accounts" (
   "user_id" text NOT NULL,
   "type" text NOT NULL,
@@ -27,20 +27,20 @@ CREATE TABLE "accounts" (
   "session_state" text,
   CONSTRAINT "accounts_provider_provider_account_id_pk" PRIMARY KEY("provider","provider_account_id")
 );
-
+--> statement-breakpoint
 CREATE TABLE "sessions" (
   "session_token" text PRIMARY KEY NOT NULL,
   "user_id" text NOT NULL,
   "expires" timestamp NOT NULL
 );
-
+--> statement-breakpoint
 CREATE TABLE "verification_tokens" (
   "identifier" text NOT NULL,
   "token" text NOT NULL,
   "expires" timestamp NOT NULL,
   CONSTRAINT "verification_tokens_identifier_token_pk" PRIMARY KEY("identifier","token")
 );
-
+--> statement-breakpoint
 CREATE TABLE "threads" (
   "id" text PRIMARY KEY NOT NULL,
   "user_id" text NOT NULL,
@@ -50,7 +50,7 @@ CREATE TABLE "threads" (
   "created_at" timestamp DEFAULT now() NOT NULL,
   "updated_at" timestamp DEFAULT now() NOT NULL
 );
-
+--> statement-breakpoint
 CREATE TABLE "messages" (
   "id" text PRIMARY KEY NOT NULL,
   "thread_id" text NOT NULL,
@@ -59,17 +59,23 @@ CREATE TABLE "messages" (
   "content" jsonb NOT NULL,
   "created_at" timestamp DEFAULT now() NOT NULL
 );
-
+--> statement-breakpoint
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_user_id_users_id_fk"
   FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE cascade;
+--> statement-breakpoint
 ALTER TABLE "sessions" ADD CONSTRAINT "sessions_user_id_users_id_fk"
   FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE cascade;
+--> statement-breakpoint
 ALTER TABLE "threads" ADD CONSTRAINT "threads_user_id_users_id_fk"
   FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE cascade;
+--> statement-breakpoint
 ALTER TABLE "messages" ADD CONSTRAINT "messages_thread_id_threads_id_fk"
   FOREIGN KEY ("thread_id") REFERENCES "threads"("id") ON DELETE cascade;
-
+--> statement-breakpoint
 CREATE INDEX "accounts_user_id_idx" ON "accounts" USING btree ("user_id");
+--> statement-breakpoint
 CREATE INDEX "sessions_user_id_idx" ON "sessions" USING btree ("user_id");
+--> statement-breakpoint
 CREATE INDEX "threads_user_id_idx" ON "threads" USING btree ("user_id");
+--> statement-breakpoint
 CREATE INDEX "messages_thread_id_idx" ON "messages" USING btree ("thread_id");

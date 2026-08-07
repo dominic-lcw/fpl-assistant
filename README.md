@@ -10,6 +10,7 @@ Fantasy Premier League chat assistant built with the [assistant-ui](https://www.
 - Live FPL tools: general info, fixtures, gameweek live, manager profile/history/squad, classic leagues, player detail
 - Kimi built-in `$web_search` for player/team/manager news (same Moonshot/Kimi chat key)
 - Deterministic captain / transfer / watchlist suggestions from form, xGI, and fixture difficulty
+- Legal 15-player squad builder (`draft_100` £100m or `wildcard` from manager value) with per-user drafts in Postgres
 - Agent skills under `.agents/skills/` documenting FPL API endpoints and web-search usage
 - Minimal assistant-ui Thread chat UI with streaming responses
 - Composer model picker for Kimi K3 and Kimi K2.7

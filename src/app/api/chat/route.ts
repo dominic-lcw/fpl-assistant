@@ -32,15 +32,23 @@ FPL API tools (prefer these for official numbers):
 - get_classic_league_standings → /leagues-classic/{id}/standings/
 - get_player_detailed_data → /element-summary/{id}/
 - get_suggestions → deterministic captain/transfer/watchlist from API data
+- suggest_squad → build a legal 15-player squad (draft_100 £100.0m or wildcard from manager value+bank); set save=true to persist in Postgres
+- list_squad_drafts / get_squad_draft / delete_squad_draft → manage the user's saved squad drafts in Postgres
 
 Web tool:
 - $web_search → Kimi built-in web search for injuries, press, lineups, manager/team news, and other off-API FPL context
+
+Squad rules (always enforce via suggest_squad, never invent illegal squads):
+- Exactly 15 players: 2 GKP, 5 DEF, 5 MID, 3 FWD
+- Max 3 players from any one Premier League club
+- draft_100 budget £100.0m; wildcard budget = manager squad value + bank
+- Prefer suggest_squad(save=true) when the user wants a draft kept for later
 
 Rules:
 - Always use tools for live FPL facts. Do not invent player stats, fixtures, ranks, or IDs.
 - Resolve player names via get_general_information / bootstrap data before calling get_player_detailed_data.
 - Use $web_search for recent news; then cross-check availability fields from FPL tools before advising.
-- If a manager ID is present in context, use it by default for manager/squad/suggestion tools.
+- If a manager ID is present in context, use it by default for manager/squad/suggestion/wildcard tools.
 - If data is unavailable (preseason, missing picks, API errors), say so clearly.
 - Include the relevant gameweek when giving advice.
 - Ground recommendations in form, expected goal involvement, minutes, availability, and fixture difficulty.
@@ -99,7 +107,7 @@ export async function POST(req: Request) {
 
   const modelId = resolveKimiModelId(model);
   const managerId = extractManagerId(system);
-  const fplTools = createFplTools(managerId);
+  const fplTools = createFplTools({ managerId, userId: user.id });
   const kimi = createKimiProvider();
 
   const result = streamText({

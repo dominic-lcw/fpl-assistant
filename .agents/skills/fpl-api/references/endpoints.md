@@ -64,4 +64,7 @@ Classic league metadata + paginated standings (`rank`, `entry`, `entry_name`, `p
 - `src/lib/fpl/types.ts` — response types
 - `src/lib/fpl/tools.ts` — AI tools exposed to the chat agent
 - `src/lib/fpl/analysis.ts` — form/fixture scoring and suggestions
+- `src/lib/fpl/squad.ts` — legal 15-player builder (`draft_100` / `wildcard`)
+- `src/lib/fpl/drafts.ts` — Postgres persistence for per-user squad drafts
+- `src/app/api/drafts/` — REST CRUD/generate for saved drafts
 - `src/app/api/chat/route.ts` — wires tools + system prompt

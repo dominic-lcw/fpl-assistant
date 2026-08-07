@@ -41,7 +41,7 @@ Read `references/endpoints.md` for field notes, IDs, and caveats.
 6. FDR is 1 (easy) to 5 (hard).
 7. Preseason / missing picks often return 404 — surface that clearly.
 8. Space `/element-summary/` calls; do not batch-fetch all players unless explicitly required.
-9. For injury/press/news beyond API `news` fields, use the `web_search` tool / `fpl-web-search` skill.
+9. For injury/press/news beyond API `news` fields, use Kimi `$web_search` / the `fpl-web-search` skill.
 
 ## Quick curl checks
 

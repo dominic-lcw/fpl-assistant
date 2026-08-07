@@ -1,4 +1,3 @@
-import { moonshotai } from "@ai-sdk/moonshotai";
 import { frontendTools } from "@assistant-ui/react-ai-sdk";
 import {
   convertToModelMessages,
@@ -9,6 +8,8 @@ import {
 
 import { createFplTools } from "@/lib/fpl/tools";
 import { managerIdSchema } from "@/lib/fpl/validation";
+import { createKimiBuiltinWebSearchTool } from "@/lib/kimi/builtin-web-search";
+import { createKimiProvider } from "@/lib/kimi/provider";
 
 export const maxDuration = 60;
 
@@ -26,12 +27,12 @@ FPL API tools (prefer these for official numbers):
 - get_suggestions → deterministic captain/transfer/watchlist from API data
 
 Web tool:
-- web_search → Moonshot official web search for injuries, press, lineups, manager/team news, and other off-API FPL context
+- $web_search → Kimi built-in web search for injuries, press, lineups, manager/team news, and other off-API FPL context
 
 Rules:
 - Always use tools for live FPL facts. Do not invent player stats, fixtures, ranks, or IDs.
 - Resolve player names via get_general_information / bootstrap data before calling get_player_detailed_data.
-- Use web_search for recent news; then cross-check availability fields from FPL tools before advising.
+- Use $web_search for recent news; then cross-check availability fields from FPL tools before advising.
 - If a manager ID is present in context, use it by default for manager/squad/suggestion tools.
 - If data is unavailable (preseason, missing picks, API errors), say so clearly.
 - Include the relevant gameweek when giving advice.
@@ -72,15 +73,17 @@ export async function POST(req: Request) {
   const modelId = process.env.KIMI_MODEL?.trim() || "kimi-k3";
   const managerId = extractManagerId(system);
   const fplTools = createFplTools(managerId);
+  const kimi = createKimiProvider();
 
   const result = streamText({
-    model: moonshotai(modelId),
+    model: kimi(modelId),
     system: [SYSTEM_PROMPT, system].filter(Boolean).join("\n\n"),
     messages: await convertToModelMessages(messages),
     stopWhen: stepCountIs(8),
     tools: {
       ...frontendTools(frontendToolDefs as never),
       ...fplTools,
+      ...createKimiBuiltinWebSearchTool(),
     },
   });
 

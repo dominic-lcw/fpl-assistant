@@ -29,6 +29,13 @@ No authentication. Prefer the typed client in `src/lib/fpl/client.ts` and the ch
 | `GET /leagues-classic/{id}/standings/?page_standings={p}` | `getClassicLeagueStandings` | `get_classic_league_standings` | Classic league table |
 | `GET /element-summary/{id}/` | `getElementSummary` | `get_player_detailed_data` | Player history + upcoming fixtures |
 
+App-local (Postgres + analysis, not FPL API):
+
+| Capability | Module | Chat tool | Purpose |
+|------------|--------|-----------|---------|
+| Legal 15-player builder | `src/lib/fpl/squad.ts` | `suggest_squad` | `draft_100` (£100.0m) or `wildcard` (manager value+bank); rules: 2/5/5/3, max 3/club |
+| Persisted drafts | `squad_drafts` table | `list_squad_drafts`, `get_squad_draft`, `delete_squad_draft` | Per-user draft storage; REST at `/api/drafts` |
+
 Read `references/endpoints.md` for field notes, IDs, and caveats.
 
 ## Rules
@@ -37,11 +44,12 @@ Read `references/endpoints.md` for field notes, IDs, and caveats.
 2. Resolve player names via bootstrap `elements[]` (`web_name`, `first_name`, `second_name`) before calling `/element-summary/{id}/`.
 3. Prices are in 0.1m units (`130` → £13.0m).
 4. Positions: `1=GKP`, `2=DEF`, `3=MID`, `4=FWD`.
-5. Status: `a` available, `d` doubtful, `i` injured, `s` suspended, `u` unavailable.
-6. FDR is 1 (easy) to 5 (hard).
-7. Preseason / missing picks often return 404 — surface that clearly.
-8. Space `/element-summary/` calls; do not batch-fetch all players unless explicitly required.
-9. For injury/press/news beyond API `news` fields, use Kimi `$web_search` / the `fpl-web-search` skill.
+5. Squad composition for drafts: 2 GKP / 5 DEF / 5 MID / 3 FWD, max 3 per club, £100.0m starting budget (`draft_100`) or manager `value + bank` (`wildcard`).
+6. Status: `a` available, `d` doubtful, `i` injured, `s` suspended, `u` unavailable.
+7. FDR is 1 (easy) to 5 (hard).
+8. Preseason / missing picks often return 404 — surface that clearly. Prefer `suggest_squad` with `mode=draft_100` when wildcard value is unavailable.
+9. Space `/element-summary/` calls; do not batch-fetch all players unless explicitly required.
+10. For injury/press/news beyond API `news` fields, use Kimi `$web_search` / the `fpl-web-search` skill.
 
 ## Quick curl checks
 

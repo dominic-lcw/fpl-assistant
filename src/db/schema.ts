@@ -116,3 +116,60 @@ export const messages = pgTable(
   (message) => [index("messages_thread_id_idx").on(message.threadId)],
 );
 
+/** Snapshot of one pick inside a persisted 15-player draft. */
+export type SquadDraftPick = {
+  elementId: number;
+  webName: string;
+  teamId: number;
+  teamShort: string;
+  position: "GKP" | "DEF" | "MID" | "FWD";
+  elementType: 1 | 2 | 3 | 4;
+  /** Price in £m (e.g. 7.5). */
+  cost: number;
+  pickPosition: number;
+  isCaptain: boolean;
+  isViceCaptain: boolean;
+  form: number;
+  pointsPerGame: number;
+  totalPoints: number;
+  fixtureRunScore: number;
+  recommendationScore: number;
+  status: string;
+};
+
+export const squadDrafts = pgTable(
+  "squad_drafts",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    /** Fresh £100m draft, or rebuild using manager squad value + bank. */
+    mode: text("mode", { enum: ["draft_100", "wildcard"] }).notNull(),
+    status: text("status", { enum: ["draft", "active", "archived"] })
+      .notNull()
+      .default("draft"),
+    /** Budget ceiling in 0.1m units (1000 = £100.0m). */
+    budgetTenths: integer("budget_tenths").notNull(),
+    /** Remaining ITB in 0.1m units, e.g. 15 = £1.5m. */
+    bankTenths: integer("bank_tenths").notNull().default(0),
+    /** Total squad cost in 0.1m units. */
+    costTenths: integer("cost_tenths").notNull().default(0),
+    managerId: integer("manager_id"),
+    gameweek: integer("gameweek"),
+    picks: jsonb("picks").$type<SquadDraftPick[]>().notNull().default([]),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (draft) => [
+    index("squad_drafts_user_id_idx").on(draft.userId),
+    index("squad_drafts_user_status_idx").on(draft.userId, draft.status),
+  ],
+);
+

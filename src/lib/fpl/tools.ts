@@ -20,6 +20,18 @@ import {
   getManagerPicks,
 } from "./client";
 import {
+  deleteUserDraft,
+  getUserDraft,
+  listUserDrafts,
+  saveBuiltSquadDraft,
+  serializeDraft,
+} from "./drafts";
+import {
+  DRAFT_BUDGET_TENTHS,
+  buildLegalSquad,
+  type SquadBuildMode,
+} from "./squad";
+import {
   gameweekIdSchema,
   leagueIdSchema,
   managerIdSchema,
@@ -88,7 +100,48 @@ function compactPlayer(p: {
   };
 }
 
-export function createFplTools(defaultManagerId?: number) {
+function compactDraftPick(p: {
+  elementId: number;
+  webName: string;
+  teamShort: string;
+  position: string;
+  cost: number;
+  pickPosition: number;
+  isCaptain: boolean;
+  isViceCaptain: boolean;
+  form: number;
+  pointsPerGame: number;
+  totalPoints: number;
+  fixtureRunScore: number;
+  recommendationScore: number;
+  status: string;
+}) {
+  return {
+    id: p.elementId,
+    name: p.webName,
+    team: p.teamShort,
+    position: p.position,
+    cost: p.cost,
+    pickPosition: p.pickPosition,
+    isCaptain: p.isCaptain,
+    isViceCaptain: p.isViceCaptain,
+    isBench: p.pickPosition > 11,
+    form: p.form,
+    ppg: p.pointsPerGame,
+    totalPoints: p.totalPoints,
+    fixtureRunScore: p.fixtureRunScore,
+    score: p.recommendationScore,
+    status: p.status,
+  };
+}
+
+export function createFplTools(options?: {
+  managerId?: number;
+  userId?: string;
+}) {
+  const defaultManagerId = options?.managerId;
+  const userId = options?.userId;
+
   return {
     get_general_information: tool({
       description:
@@ -407,6 +460,199 @@ export function createFplTools(defaultManagerId?: number) {
             disclaimer:
               "Scores are heuristic (form, xGI, minutes, fixture difficulty, availability). Treat as advice, not certainty.",
           };
+        }),
+    }),
+
+    suggest_squad: tool({
+      description:
+        "Build a legal 15-player FPL squad (2 GKP, 5 DEF, 5 MID, 3 FWD, max 3 per club) using form, xGI, and fixture difficulty. Modes: draft_100 (£100.0m blank slate) or wildcard (manager team value + bank). Optionally persist the draft for the signed-in user in Postgres.",
+      inputSchema: z.object({
+        mode: z
+          .enum(["draft_100", "wildcard"])
+          .describe(
+            "draft_100 = fresh £100.0m squad; wildcard = rebuild using manager value + bank",
+          ),
+        managerId: managerIdSchema
+          .optional()
+          .describe("Required for wildcard mode unless a Manager ID is in context."),
+        gameweek: gameweekIdSchema.optional(),
+        save: z
+          .boolean()
+          .optional()
+          .describe("If true, persist this squad draft for the user in Postgres."),
+        title: z
+          .string()
+          .min(1)
+          .max(120)
+          .optional()
+          .describe("Title when saving the draft."),
+      }),
+      execute: async ({ mode, managerId, gameweek, save, title }) =>
+        runFplTool(async () => {
+          const [bootstrap, fixtures] = await Promise.all([
+            getBootstrapStatic(),
+            getFixtures(),
+          ]);
+          const relevant = getRelevantGameweek(bootstrap);
+          let budgetTenths = DRAFT_BUDGET_TENTHS;
+          let resolvedManagerId: number | undefined;
+          let gw = gameweek ?? relevant.id;
+
+          if (mode === "wildcard") {
+            resolvedManagerId = managerId ?? defaultManagerId;
+            if (!resolvedManagerId) {
+              return {
+                error:
+                  "Wildcard mode needs a manager ID. Ask the user to enter their Manager ID.",
+              };
+            }
+            const entry = await getManagerEntry(resolvedManagerId);
+            gw = gameweek ?? entry.current_event ?? relevant.id;
+            if (!gw) {
+              return {
+                error:
+                  "No gameweek available to resolve manager team value (common in preseason). Use draft_100 instead.",
+              };
+            }
+            const picks = await getManagerPicks(resolvedManagerId, gw);
+            budgetTenths =
+              picks.entry_history.value + picks.entry_history.bank;
+          }
+
+          if (!gw) {
+            gw = 1;
+          }
+
+          const built = buildLegalSquad({
+            bootstrap,
+            fixtures,
+            gameweek: { ...relevant, id: gw },
+            mode: mode as SquadBuildMode,
+            budgetTenths,
+          });
+
+          let saved: ReturnType<typeof serializeDraft> | null = null;
+          if (save) {
+            if (!userId) {
+              return {
+                error: "Cannot save draft: no signed-in user on this request.",
+                squad: {
+                  mode: built.mode,
+                  valid: built.valid,
+                  issues: built.issues,
+                  gameweek: built.gameweek,
+                  budget: built.budgetTenths / 10,
+                  cost: built.costTenths / 10,
+                  bank: built.bankTenths / 10,
+                  averageScore: built.averageScore,
+                  picks: built.picks.map(compactDraftPick),
+                },
+              };
+            }
+            const row = await saveBuiltSquadDraft({
+              userId,
+              title:
+                title ??
+                (mode === "draft_100"
+                  ? `£100m draft GW${gw}`
+                  : `Wildcard draft GW${gw}`),
+              built,
+              managerId: resolvedManagerId ?? null,
+            });
+            saved = serializeDraft(row);
+          }
+
+          return {
+            mode: built.mode,
+            valid: built.valid,
+            issues: built.issues,
+            gameweek: built.gameweek,
+            budget: built.budgetTenths / 10,
+            cost: built.costTenths / 10,
+            bank: built.bankTenths / 10,
+            averageScore: built.averageScore,
+            managerId: resolvedManagerId,
+            picks: built.picks.map(compactDraftPick),
+            saved,
+            rules: {
+              squad: "2 GKP, 5 DEF, 5 MID, 3 FWD",
+              maxPerClub: 3,
+              formationHint: "XI suggested as 4-4-2; positions 12–15 are bench",
+            },
+            disclaimer:
+              "Heuristic squad from form, xGI, availability, and fixture difficulty. Validate before locking in FPL.",
+          };
+        }),
+    }),
+
+    list_squad_drafts: tool({
+      description:
+        "List the signed-in user's persisted FPL squad drafts from Postgres (most recent first).",
+      inputSchema: z.object({
+        limit: z.number().int().min(1).max(50).optional(),
+      }),
+      execute: async ({ limit = 10 }) =>
+        runFplTool(async () => {
+          if (!userId) {
+            return { error: "No signed-in user available for draft storage." };
+          }
+          const rows = await listUserDrafts(userId, limit);
+          return {
+            drafts: rows.map((row) => ({
+              id: row.id,
+              title: row.title,
+              mode: row.mode,
+              status: row.status,
+              budget: row.budgetTenths / 10,
+              cost: row.costTenths / 10,
+              bank: row.bankTenths / 10,
+              gameweek: row.gameweek,
+              managerId: row.managerId,
+              pickCount: row.picks.length,
+              updatedAt: row.updatedAt.toISOString(),
+            })),
+          };
+        }),
+    }),
+
+    get_squad_draft: tool({
+      description:
+        "Load one persisted squad draft (15 picks + budget) for the signed-in user from Postgres.",
+      inputSchema: z.object({
+        draftId: z.string().min(1).describe("Squad draft UUID"),
+      }),
+      execute: async ({ draftId }) =>
+        runFplTool(async () => {
+          if (!userId) {
+            return { error: "No signed-in user available for draft storage." };
+          }
+          const row = await getUserDraft(userId, draftId);
+          if (!row) {
+            return { error: `Draft ${draftId} was not found.` };
+          }
+          const draft = serializeDraft(row);
+          return {
+            ...draft,
+            picks: draft.picks.map(compactDraftPick),
+          };
+        }),
+    }),
+
+    delete_squad_draft: tool({
+      description: "Delete a persisted squad draft owned by the signed-in user.",
+      inputSchema: z.object({
+        draftId: z.string().min(1),
+      }),
+      execute: async ({ draftId }) =>
+        runFplTool(async () => {
+          if (!userId) {
+            return { error: "No signed-in user available for draft storage." };
+          }
+          const deleted = await deleteUserDraft(userId, draftId);
+          if (!deleted) {
+            return { error: `Draft ${draftId} was not found.` };
+          }
+          return { deleted: deleted.id };
         }),
     }),
   };

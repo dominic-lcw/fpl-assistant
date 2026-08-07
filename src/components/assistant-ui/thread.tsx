@@ -125,10 +125,10 @@ const ThreadScrollToBottom: FC = () => {
 };
 
 const FPL_STARTERS = [
+  "Build me a legal £100m 15-player draft and save it",
   "Review my squad for the next gameweek",
   "Who should I captain?",
   "Suggest transfers based on form and fixtures",
-  "Summarize my manager history and chips",
 ] as const;
 
 const ThreadWelcome: FC = () => {

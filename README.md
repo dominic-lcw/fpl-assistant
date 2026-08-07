@@ -8,7 +8,9 @@ Fantasy Premier League chat assistant built with the [assistant-ui](https://www.
 - Persistent, per-user chat threads and messages
 - Manager ID input with persisted profile snapshot
 - Live FPL tools: general info, fixtures, gameweek live, manager profile/history/squad, classic leagues, player detail
+- Kimi built-in `$web_search` for player/team/manager news (same Moonshot/Kimi chat key)
 - Deterministic captain / transfer / watchlist suggestions from form, xGI, and fixture difficulty
+- Agent skills under `.agents/skills/` documenting FPL API endpoints and web-search usage
 - Minimal assistant-ui Thread chat UI with streaming responses
 - Composer model picker for Kimi K3 and Kimi K2.7
 - Last-reply token usage ring (assistant-ui Context Display)
@@ -38,6 +40,15 @@ AUTH_TRUST_HOST=true
 First-time Google sign-ins are stored as `pending`. Set `ADMIN_EMAILS` to one
 or more comma-separated bootstrap administrator emails; administrators can
 approve, reject, revoke, or restore accounts at `/admin`.
+
+### Agent skills
+
+Project skills for coding agents live in `.agents/skills/`:
+
+- `fpl-api` — public FPL endpoints and how they map to `src/lib/fpl/*` tools
+- `fpl-web-search` — when to use Kimi `$web_search` for players, teams, and managers
+
+Restore other locked skills from `skills-lock.json` with `npx skills experimental_install` if needed.
 
 ### Local + Cloud Run share one Cloud SQL database
 

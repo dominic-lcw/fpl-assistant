@@ -27,7 +27,7 @@ No authentication. Prefer the typed client in `src/lib/fpl/client.ts` and the ch
 | `GET /entry/{id}/history/` | `getManagerHistory` | `get_manager_history` | GW history, chips, past seasons |
 | `GET /entry/{id}/event/{gw}/picks/` | `getManagerPicks` | `get_manager_squad`, `get_suggestions` | Squad picks for a GW |
 | `GET /leagues-classic/{id}/standings/?page_standings={p}` | `getClassicLeagueStandings` | `get_classic_league_standings` | Classic league table |
-| `GET /element-summary/{id}/` | `getElementSummary` | `get_player_detailed_data` | Player history + upcoming fixtures |
+| `GET /element-summary/{id}/` | `getElementSummary` | `get_player_detailed_data`, `compare_players` | Player history + upcoming fixtures |
 
 App-local (Postgres + analysis, not FPL API):
 

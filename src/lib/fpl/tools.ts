@@ -32,6 +32,11 @@ import {
   type SquadBuildMode,
 } from "./squad";
 import {
+  buildComparisonRows,
+  researchTargetsFromSuggestions,
+  toCompactSuggestionPlayer,
+} from "./suggestion-evidence";
+import {
   gameweekIdSchema,
   leagueIdSchema,
   managerIdSchema,
@@ -416,7 +421,7 @@ export function createFplTools(options?: {
 
     get_suggestions: tool({
       description:
-        "Build deterministic captain, transfer, and watchlist suggestions for a manager based on form, expected stats, and upcoming fixture difficulty.",
+        "Build deterministic captain, transfer, and watchlist suggestions for a manager based on form, expected stats, and upcoming fixture difficulty. Returns side-by-side comparison rows plus researchTargets that still need $web_search before advising.",
       inputSchema: z.object({
         managerId: managerIdSchema.optional(),
         gameweek: gameweekIdSchema.optional(),
@@ -450,15 +455,107 @@ export function createFplTools(options?: {
             picks,
             gameweek: { ...relevant, id: gw },
           });
+          const captainCandidates = recs.captainCandidates.map(
+            toCompactSuggestionPlayer,
+          );
+          const transferOutCandidates = recs.transferOutCandidates.map(
+            toCompactSuggestionPlayer,
+          );
+          const transferInCandidates = recs.transferInCandidates.map(
+            toCompactSuggestionPlayer,
+          );
           return {
             gameweek: recs.gameweek,
             bank: picks.entry_history.bank / 10,
-            captainCandidates: recs.captainCandidates.map(compactPlayer),
-            transferOutCandidates: recs.transferOutCandidates.map(compactPlayer),
-            transferInCandidates: recs.transferInCandidates.map(compactPlayer),
-            watchlist: recs.watchlist.map(compactPlayer),
+            captainCandidates,
+            transferOutCandidates,
+            transferInCandidates,
+            watchlist: recs.watchlist.map(toCompactSuggestionPlayer),
+            comparisons: {
+              captain: buildComparisonRows(recs.captainCandidates, 3),
+              transferIn: buildComparisonRows(recs.transferInCandidates, 3),
+              transferOut: buildComparisonRows(recs.transferOutCandidates, 3),
+            },
+            researchTargets: researchTargetsFromSuggestions({
+              captains: captainCandidates,
+              transferOut: transferOutCandidates,
+              transferIn: transferInCandidates,
+            }),
+            nextSteps: [
+              "If researchTargets is non-empty, call $web_search for those players before locking advice.",
+              "Present captain and transfer comparisons with form, xGI, ownership, fixtures, and news risk.",
+              "If risk appetite, budget, or differential preference is unknown, call ask_user_choices first.",
+            ],
             disclaimer:
-              "Scores are heuristic (form, xGI, minutes, fixture difficulty, availability). Treat as advice, not certainty.",
+              "Scores are heuristic (form, xGI, minutes, fixture difficulty, availability). Always cross-check news with $web_search and treat as advice, not certainty.",
+          };
+        }),
+    }),
+
+    compare_players: tool({
+      description:
+        "Side-by-side comparison of 2–4 FPL players using form, xGI, ownership, availability, and upcoming fixtures. Resolve names via bootstrap when IDs are unknown.",
+      inputSchema: z.object({
+        playerIds: z
+          .array(playerIdSchema)
+          .min(2)
+          .max(4)
+          .describe("FPL element IDs to compare"),
+        gameweek: gameweekIdSchema.optional(),
+      }),
+      execute: async ({ playerIds, gameweek }) =>
+        runFplTool(async () => {
+          const [bootstrap, fixtures] = await Promise.all([
+            getBootstrapStatic(),
+            getFixtures(),
+          ]);
+          const relevant = getRelevantGameweek(bootstrap);
+          const fromEvent = gameweek ?? (relevant.id > 0 ? relevant.id : 1);
+          const byId = new Map(bootstrap.elements.map((e) => [e.id, e]));
+          const missing = playerIds.filter((id) => !byId.has(id));
+          if (missing.length > 0) {
+            return {
+              error: `Unknown player IDs: ${missing.join(", ")}. Resolve names via get_general_information first.`,
+            };
+          }
+
+          const details = await Promise.all(
+            playerIds.map(async (id) => {
+              const element = byId.get(id)!;
+              try {
+                const detail = await getElementSummary(id);
+                return buildPlayerFormSummary(
+                  element,
+                  bootstrap,
+                  fixtures,
+                  fromEvent,
+                  detail,
+                );
+              } catch {
+                return buildPlayerFormSummary(
+                  element,
+                  bootstrap,
+                  fixtures,
+                  fromEvent,
+                );
+              }
+            }),
+          );
+
+          const ranked = [...details].sort(
+            (a, b) => b.recommendationScore - a.recommendationScore,
+          );
+          return {
+            gameweek: relevant,
+            players: ranked.map(toCompactSuggestionPlayer),
+            comparison: buildComparisonRows(ranked, ranked.length),
+            researchTargets: researchTargetsFromSuggestions({
+              captains: ranked.map(toCompactSuggestionPlayer),
+              transferOut: [],
+              transferIn: [],
+            }),
+            disclaimer:
+              "Comparison uses FPL API form/xGI/fixtures. Use $web_search when researchTargets is non-empty.",
           };
         }),
     }),

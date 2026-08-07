@@ -4,6 +4,7 @@ import {
   UserMessageAttachments,
 } from "@/components/assistant-ui/attachment";
 import { ContextDisplay } from "@/components/assistant-ui/context-display";
+import { ThreadFollowupSuggestions } from "@/components/assistant-ui/follow-up-suggestions";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { ModelPicker, useModelSelection } from "@/components/assistant-ui/model-picker";
 import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
@@ -90,6 +91,7 @@ export const Thread: FC = () => {
             )}
           >
             <ThreadScrollToBottom />
+            <ThreadFollowupSuggestions />
             <Composer />
             <AuiIf condition={(s) => isNewChatView(s) && s.composer.isEmpty}>
               <ThreadSuggestions />

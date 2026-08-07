@@ -3,6 +3,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 function loadEnvFiles() {
+  const fromShell = new Set(Object.keys(process.env));
+  const fromFiles = new Map<string, string>();
+
   for (const name of [".env", ".env.local"]) {
     const path = resolve(process.cwd(), name);
     if (!existsSync(path)) continue;
@@ -19,8 +22,12 @@ function loadEnvFiles() {
       ) {
         value = value.slice(1, -1);
       }
-      if (!(key in process.env)) process.env[key] = value;
+      fromFiles.set(key, value);
     }
+  }
+
+  for (const [key, value] of fromFiles) {
+    if (!fromShell.has(key)) process.env[key] = value;
   }
 }
 

@@ -1,8 +1,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-/** Load `.env` then `.env.local` into process.env (local files win). */
+/** Load `.env` then `.env.local` into process.env (.env.local wins; shell wins over both). */
 export function loadEnvFiles(cwd = process.cwd()) {
+  const fromShell = new Set(Object.keys(process.env));
+  const fromFiles = new Map();
+
   for (const name of [".env", ".env.local"]) {
     const path = resolve(cwd, name);
     if (!existsSync(path)) continue;
@@ -19,7 +22,11 @@ export function loadEnvFiles(cwd = process.cwd()) {
       ) {
         value = value.slice(1, -1);
       }
-      if (!(key in process.env)) process.env[key] = value;
+      fromFiles.set(key, value);
     }
+  }
+
+  for (const [key, value] of fromFiles) {
+    if (!fromShell.has(key)) process.env[key] = value;
   }
 }

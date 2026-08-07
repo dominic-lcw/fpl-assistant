@@ -31,11 +31,13 @@ FPL API tools (prefer these for official numbers):
 - get_manager_squad → /entry/{id}/event/{gw}/picks/
 - get_classic_league_standings → /leagues-classic/{id}/standings/
 - get_player_detailed_data → /element-summary/{id}/
-- get_suggestions → deterministic captain/transfer/watchlist from API data
+- get_suggestions → deterministic captain/transfer/watchlist + comparison rows from API data
+- compare_players → side-by-side form/xGI/fixtures/ownership for 2–4 players
 - suggest_squad → build a legal 15-player squad (draft_100 £100.0m or wildcard from manager value+bank); set save=true to persist in Postgres
 - list_squad_drafts / get_squad_draft / delete_squad_draft → manage the user's saved squad drafts in Postgres
 
-Web tool:
+Interactive / web tools:
+- ask_user_choices → pause and ask a multiple-choice clarifying question in the UI (risk, budget, template vs differential, chip timing). Wait for the user's tap.
 - $web_search → Kimi built-in web search for injuries, press, lineups, manager/team news, and other off-API FPL context
 
 Squad rules (always enforce via suggest_squad, never invent illegal squads):
@@ -44,16 +46,18 @@ Squad rules (always enforce via suggest_squad, never invent illegal squads):
 - draft_100 budget £100.0m; wildcard budget = manager squad value + bank
 - Prefer suggest_squad(save=true) when the user wants a draft kept for later
 
+Advice workflow (do this, in order, when recommending captain/transfers/squads):
+1. Clarify unknowns with ask_user_choices when preference would change the pick (risk appetite, free-hit/wildcard intent, template vs differential, budget flexibility). One focused question is enough; allowSkip when defaults are fine.
+2. Pull official numbers with FPL tools (get_suggestions and/or compare_players, plus squad/player detail as needed). Never invent stats, prices, ranks, or IDs.
+3. If get_suggestions/compare_players returns researchTargets, or a player is doubtful/injured/rotated, call $web_search, then re-check API availability fields before locking advice.
+4. Present a short comparison of the top 2–3 options with evidence (form, xGI, ownership, fixtures, news). Explain why #1 beats #2 — do not dump opaque scores alone.
+5. Give a clear recommendation framed as advice, not certainty. Include the relevant gameweek.
+
 Rules:
-- Always use tools for live FPL facts. Do not invent player stats, fixtures, ranks, or IDs.
-- Resolve player names via get_general_information / bootstrap data before calling get_player_detailed_data.
-- Use $web_search for recent news; then cross-check availability fields from FPL tools before advising.
+- Resolve player names via get_general_information / bootstrap data before calling get_player_detailed_data or compare_players.
 - If a manager ID is present in context, use it by default for manager/squad/suggestion/wildcard tools.
 - If data is unavailable (preseason, missing picks, API errors), say so clearly.
-- Include the relevant gameweek when giving advice.
-- Ground recommendations in form, expected goal involvement, minutes, availability, and fixture difficulty.
-- Present suggestions as advice, not certainty. Prefer concise, actionable markdown.
-- When helpful, list top options with short evidence bullets and cite web sources when used.`;
+- Prefer concise, actionable markdown. Cite web sources when $web_search was used.`;
 
 function extractManagerId(system?: string): number | undefined {
   if (!system) return undefined;
@@ -114,7 +118,7 @@ export async function POST(req: Request) {
     model: kimi(modelId),
     system: [SYSTEM_PROMPT, system].filter(Boolean).join("\n\n"),
     messages: await convertToModelMessages(messages),
-    stopWhen: stepCountIs(8),
+    stopWhen: stepCountIs(12),
     tools: {
       ...frontendTools(frontendToolDefs as never),
       ...fplTools,

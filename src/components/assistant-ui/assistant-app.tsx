@@ -29,16 +29,22 @@ import {
   DraftSideRail,
   MobileDraftPanel,
 } from "@/components/fpl/draft-panel";
+import { AskUserChoicesTool } from "@/components/fpl/ask-user-tool";
 import {
   GetSquadDraftToolSync,
   SuggestSquadToolSync,
 } from "@/components/fpl/draft-tool-sync";
+import {
+  ComparePlayersToolUI,
+  GetSuggestionsToolUI,
+} from "@/components/fpl/suggestions-tool-ui";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { createFplFollowUpSuggestionAdapter } from "@/lib/fpl/follow-up-suggestions";
 
 function useThreadRuntime() {
   const { modelId } = useModelSelection();
@@ -52,9 +58,17 @@ function useThreadRuntime() {
     [modelId],
   );
 
+  const suggestionAdapter = useMemo(
+    () => createFplFollowUpSuggestionAdapter(),
+    [],
+  );
+
   return useChatRuntime({
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     transport,
+    adapters: {
+      suggestion: suggestionAdapter,
+    },
   });
 }
 
@@ -94,8 +108,11 @@ function AssistantRuntimeShell({ authSlot }: { authSlot?: ReactNode }) {
     <AssistantRuntimeProvider runtime={runtime}>
       <ManagerProvider>
         <DraftProvider>
+          <AskUserChoicesTool />
           <SuggestSquadToolSync />
           <GetSquadDraftToolSync />
+          <GetSuggestionsToolUI />
+          <ComparePlayersToolUI />
           <div className="flex h-dvh overflow-hidden">
             <ThreadList />
             <div className="flex min-w-0 flex-1 flex-col">

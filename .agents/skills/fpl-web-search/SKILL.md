@@ -14,6 +14,11 @@ Use web search for **time-sensitive or off-API** FPL context. Keep official FPL 
 - Transfer rumors that affect minutes
 - Manager comments (club manager or FPL content creators) about selection
 - Deadline-day or price-change discussion not present in bootstrap `news`
+- After `get_suggestions` / `compare_players` returns non-empty `researchTargets`
+
+## Clarifying before advising
+
+Prefer the chat `ask_user_choices` tool when risk appetite, budget flexibility, or template vs differential preference would change the recommendation. Then compare options with API evidence and only then search the web for news risk.
 
 ## When not to search
 

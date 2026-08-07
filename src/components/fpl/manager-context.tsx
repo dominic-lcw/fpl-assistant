@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { useAssistantContext, useAssistantInstructions } from "@assistant-ui/react";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { isValidManagerIdInput } from "@/lib/fpl/validation";
 
 const STORAGE_KEY = "fpl-assistant.managerId";
@@ -230,6 +231,7 @@ export function ManagerIdBar({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {trailingSlot}
+          <ThemeToggle />
           {authSlot}
         </div>
       </div>

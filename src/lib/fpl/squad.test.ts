@@ -187,6 +187,55 @@ describe("buildLegalSquad", () => {
     );
   });
 
+  it("surfaces belief-adjusted scores on selected picks", () => {
+    const bootstrap = buildBootstrap();
+    const premiumMid = bootstrap.elements.find(
+      (e) => e.element_type === 3 && e.form === "8.5",
+    );
+    expect(premiumMid).toBeTruthy();
+
+    const plain = buildLegalSquad({
+      bootstrap,
+      fixtures,
+      gameweek: {
+        id: 1,
+        name: "Gameweek 1",
+        kind: "current",
+        deadline_time: null,
+      },
+      mode: "draft_100",
+      budgetTenths: DRAFT_BUDGET_TENTHS,
+    });
+    const boosted = buildLegalSquad({
+      bootstrap,
+      fixtures,
+      gameweek: {
+        id: 1,
+        name: "Gameweek 1",
+        kind: "current",
+        deadline_time: null,
+      },
+      mode: "draft_100",
+      budgetTenths: DRAFT_BUDGET_TENTHS,
+      beliefs: new Map([
+        [
+          premiumMid!.id,
+          { formBelief: 2, minutesRisk: 0, confidence: 1 },
+        ],
+      ]),
+    });
+
+    const plainPick = plain.picks.find((p) => p.elementId === premiumMid!.id);
+    const boostedPick = boosted.picks.find(
+      (p) => p.elementId === premiumMid!.id,
+    );
+    expect(plainPick).toBeTruthy();
+    expect(boostedPick).toBeTruthy();
+    expect(boostedPick!.recommendationScore).toBeGreaterThan(
+      plainPick!.recommendationScore,
+    );
+  });
+
   it("respects a tighter wildcard budget", () => {
     const bootstrap = buildBootstrap();
     const built = buildLegalSquad({

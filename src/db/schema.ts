@@ -4,8 +4,10 @@ import {
   jsonb,
   pgTable,
   primaryKey,
+  real,
   text,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
@@ -170,6 +172,57 @@ export const squadDrafts = pgTable(
   (draft) => [
     index("squad_drafts_user_id_idx").on(draft.userId),
     index("squad_drafts_user_status_idx").on(draft.userId, draft.status),
+  ],
+);
+
+/**
+ * Per-user agent prior on a player's near-term form.
+ * Never shared across users — always scoped by userId.
+ */
+export type PlayerBeliefSources = string[];
+
+export const playerBeliefs = pgTable(
+  "player_beliefs",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** FPL element / player id. */
+    elementId: integer("element_id").notNull(),
+    /**
+     * Delta vs official FPL form, roughly −2…+2.
+     * Positive = agent expects better form than the API number.
+     */
+    formBelief: real("form_belief").notNull().default(0),
+    /** 0–1 chance of reduced minutes / rotation risk. */
+    minutesRisk: real("minutes_risk").notNull().default(0),
+    /** Optional upside / downside hints for captaincy narrative. */
+    ceiling: real("ceiling"),
+    floor: real("floor"),
+    /** 0–1 how strongly scoring should trust this prior. */
+    confidence: real("confidence").notNull().default(0.5),
+    /** How many gameweeks this prior is meant to cover. */
+    horizonGw: integer("horizon_gw").notNull().default(3),
+    rationale: text("rationale").notNull(),
+    sources: jsonb("sources")
+      .$type<PlayerBeliefSources>()
+      .notNull()
+      .default([]),
+    expiresAt: timestamp("expires_at", { mode: "date" }),
+    createdAt: timestamp("created_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { mode: "date" })
+      .notNull()
+      .defaultNow(),
+  },
+  (belief) => [
+    uniqueIndex("player_beliefs_user_element_uidx").on(
+      belief.userId,
+      belief.elementId,
+    ),
+    index("player_beliefs_user_id_idx").on(belief.userId),
   ],
 );
 

@@ -1,4 +1,5 @@
 import { getApprovedUser } from "@/lib/access";
+import { getActiveBeliefMap } from "@/lib/fpl/beliefs";
 import {
   listUserDrafts,
   saveBuiltSquadDraft,
@@ -132,12 +133,14 @@ export async function POST(req: Request) {
     budgetTenths = picks.entry_history.value + picks.entry_history.bank;
   }
 
+  const beliefs = await getActiveBeliefMap(user.id);
   const built = buildLegalSquad({
     bootstrap,
     fixtures,
     gameweek: { ...relevant, id: gw || 1 },
     mode: mode as SquadBuildMode,
     budgetTenths,
+    beliefs,
   });
 
   if (!save) {

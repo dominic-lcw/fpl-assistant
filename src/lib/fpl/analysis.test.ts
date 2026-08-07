@@ -348,6 +348,28 @@ describe("form and fixture scoring", () => {
     expect(summary.nextFixtures[0]?.opponent).toBe("BHA");
     expect(summary.nextFixtures[0]?.difficulty).toBe(2);
   });
+
+  it("applies private form beliefs to recommendationScore", () => {
+    const base = buildPlayerFormSummary(
+      bootstrap.elements[0]!,
+      bootstrap,
+      fixtures,
+      2,
+    );
+    const boosted = buildPlayerFormSummary(
+      bootstrap.elements[0]!,
+      bootstrap,
+      fixtures,
+      2,
+      undefined,
+      { formBelief: 1.5, minutesRisk: 0, confidence: 1 },
+    );
+    expect(boosted.beliefDelta).toBeGreaterThan(0);
+    expect(boosted.recommendationScore).toBeGreaterThan(base.recommendationScore);
+    expect(boosted.recommendationScore - base.recommendationScore).toBeCloseTo(
+      boosted.beliefDelta!,
+    );
+  });
 });
 
 describe("recommendations", () => {
@@ -357,5 +379,24 @@ describe("recommendations", () => {
     expect(recs.transferOutCandidates.some((p) => p.id === 20)).toBe(true);
     expect(recs.transferInCandidates.some((p) => p.id === 30)).toBe(true);
     expect(recs.watchlist.every((p) => p.id !== 10 && p.id !== 20)).toBe(true);
+  });
+
+  it("lets user beliefs promote a market option", () => {
+    const without = buildRecommendations({ bootstrap, fixtures, picks });
+    const withBelief = buildRecommendations({
+      bootstrap,
+      fixtures,
+      picks,
+      beliefs: new Map([
+        [30, { formBelief: 2, minutesRisk: 0, confidence: 1 }],
+      ]),
+    });
+    const baseTarget = without.transferInCandidates.find((p) => p.id === 30);
+    const boostedTarget = withBelief.transferInCandidates.find((p) => p.id === 30);
+    expect(baseTarget).toBeTruthy();
+    expect(boostedTarget).toBeTruthy();
+    expect(boostedTarget!.recommendationScore).toBeGreaterThan(
+      baseTarget!.recommendationScore,
+    );
   });
 });

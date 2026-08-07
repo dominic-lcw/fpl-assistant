@@ -9,6 +9,15 @@ import {
   summarizeManagerSnapshot,
 } from "./analysis";
 import {
+  clearUserPlayerBelief,
+  getActiveBeliefMap,
+  getActiveUserBelief,
+  listActiveUserBeliefs,
+  MAX_ABS_FORM_BELIEF,
+  serializeBelief,
+  upsertUserPlayerBelief,
+} from "./beliefs";
+import {
   FplApiError,
   getBootstrapStatic,
   getClassicLeagueStandings,
@@ -79,6 +88,10 @@ function compactPlayer(p: {
   totalPoints: number;
   fixtureRunScore: number;
   recommendationScore: number;
+  beliefDelta?: number;
+  formBelief?: number;
+  minutesRisk?: number;
+  beliefConfidence?: number;
   nextFixtures: Array<{
     event: number | null;
     opponent: string;
@@ -99,6 +112,10 @@ function compactPlayer(p: {
     totalPoints: p.totalPoints,
     fixtureRunScore: p.fixtureRunScore,
     score: p.recommendationScore,
+    beliefDelta: p.beliefDelta,
+    formBelief: p.formBelief,
+    minutesRisk: p.minutesRisk,
+    beliefConfidence: p.beliefConfidence,
     nextFixtures: p.nextFixtures.slice(0, 3),
     status: p.status,
     news: p.news || undefined,
@@ -324,7 +341,14 @@ export function createFplTools(options?: {
             return { error: "No gameweek available for squad picks." };
           }
           const picks = await getManagerPicks(id, gw);
-          const squad = buildSquadSummaries(picks, bootstrap, fixtures, gw);
+          const beliefs = userId ? await getActiveBeliefMap(userId) : undefined;
+          const squad = buildSquadSummaries(
+            picks,
+            bootstrap,
+            fixtures,
+            gw,
+            beliefs,
+          );
           return {
             gameweek: gw,
             bank: picks.entry_history.bank / 10,
@@ -385,15 +409,26 @@ export function createFplTools(options?: {
             return { error: `Player ${playerId} was not found.` };
           }
           const gw = getRelevantGameweek(bootstrap);
+          const belief = userId
+            ? await getActiveUserBelief(userId, playerId)
+            : null;
           const summary = buildPlayerFormSummary(
             element,
             bootstrap,
             fixtures,
             gw.id || 1,
             detail,
+            belief
+              ? {
+                  formBelief: Number(belief.formBelief),
+                  minutesRisk: Number(belief.minutesRisk),
+                  confidence: Number(belief.confidence),
+                }
+              : null,
           );
           return {
             player: compactPlayer(summary),
+            belief: belief ? serializeBelief(belief) : null,
             recentHistory: detail.history.slice(-6).map((h) => ({
               round: h.round,
               opponent: bootstrap.teams.find((t) => t.id === h.opponent_team)
@@ -421,7 +456,7 @@ export function createFplTools(options?: {
 
     get_suggestions: tool({
       description:
-        "Build deterministic captain, transfer, and watchlist suggestions for a manager based on form, expected stats, and upcoming fixture difficulty. Returns side-by-side comparison rows plus researchTargets that still need $web_search before advising.",
+        "Build deterministic captain, transfer, and watchlist suggestions for a manager based on form, expected stats, upcoming fixture difficulty, and the signed-in user's private player form beliefs. Returns side-by-side comparison rows plus researchTargets that still need $web_search before advising.",
       inputSchema: z.object({
         managerId: managerIdSchema.optional(),
         gameweek: gameweekIdSchema.optional(),
@@ -449,11 +484,13 @@ export function createFplTools(options?: {
             };
           }
           const picks = await getManagerPicks(id, gw);
+          const beliefs = userId ? await getActiveBeliefMap(userId) : undefined;
           const recs = buildRecommendations({
             bootstrap,
             fixtures,
             picks,
             gameweek: { ...relevant, id: gw },
+            beliefs,
           });
           const captainCandidates = recs.captainCandidates.map(
             toCompactSuggestionPlayer,
@@ -486,15 +523,16 @@ export function createFplTools(options?: {
               "Present captain and transfer comparisons with form, xGI, ownership, fixtures, and news risk.",
               "If risk appetite, budget, or differential preference is unknown, call ask_user_choices first.",
             ],
+            activeBeliefCount: beliefs?.size ?? 0,
             disclaimer:
-              "Scores are heuristic (form, xGI, minutes, fixture difficulty, availability). Always cross-check news with $web_search and treat as advice, not certainty.",
+              "Scores are heuristic (form, xGI, EP, fixture difficulty, availability, plus your private form beliefs). Always cross-check news with $web_search and treat as advice, not certainty.",
           };
         }),
     }),
 
     compare_players: tool({
       description:
-        "Side-by-side comparison of 2–4 FPL players using form, xGI, ownership, availability, and upcoming fixtures. Resolve names via bootstrap when IDs are unknown.",
+        "Side-by-side comparison of 2–4 FPL players using form, xGI, ownership, availability, upcoming fixtures, and the signed-in user's private form beliefs. Resolve names via bootstrap when IDs are unknown.",
       inputSchema: z.object({
         playerIds: z
           .array(playerIdSchema)
@@ -519,9 +557,11 @@ export function createFplTools(options?: {
             };
           }
 
+          const beliefs = userId ? await getActiveBeliefMap(userId) : undefined;
           const details = await Promise.all(
             playerIds.map(async (id) => {
               const element = byId.get(id)!;
+              const belief = beliefs?.get(id);
               try {
                 const detail = await getElementSummary(id);
                 return buildPlayerFormSummary(
@@ -530,6 +570,7 @@ export function createFplTools(options?: {
                   fixtures,
                   fromEvent,
                   detail,
+                  belief,
                 );
               } catch {
                 return buildPlayerFormSummary(
@@ -537,6 +578,8 @@ export function createFplTools(options?: {
                   bootstrap,
                   fixtures,
                   fromEvent,
+                  undefined,
+                  belief,
                 );
               }
             }),
@@ -554,15 +597,16 @@ export function createFplTools(options?: {
               transferOut: [],
               transferIn: [],
             }),
+            activeBeliefCount: beliefs?.size ?? 0,
             disclaimer:
-              "Comparison uses FPL API form/xGI/fixtures. Use $web_search when researchTargets is non-empty.",
+              "Comparison uses FPL API form/xGI/fixtures plus your private form beliefs. Use $web_search when researchTargets is non-empty.",
           };
         }),
     }),
 
     suggest_squad: tool({
       description:
-        "Build a legal 15-player FPL squad (2 GKP, 5 DEF, 5 MID, 3 FWD, max 3 per club) using form, xGI, and fixture difficulty. Modes: draft_100 (£100.0m blank slate) or wildcard (manager team value + bank). Optionally persist the draft for the signed-in user in Postgres.",
+        "Build a legal 15-player FPL squad (2 GKP, 5 DEF, 5 MID, 3 FWD, max 3 per club) using form, xGI, fixture difficulty, and the signed-in user's private form beliefs. Modes: draft_100 (£100.0m blank slate) or wildcard (manager team value + bank). Optionally persist the draft for the signed-in user in Postgres.",
       inputSchema: z.object({
         mode: z
           .enum(["draft_100", "wildcard"])
@@ -620,12 +664,14 @@ export function createFplTools(options?: {
             gw = 1;
           }
 
+          const beliefs = userId ? await getActiveBeliefMap(userId) : undefined;
           const built = buildLegalSquad({
             bootstrap,
             fixtures,
             gameweek: { ...relevant, id: gw },
             mode: mode as SquadBuildMode,
             budgetTenths,
+            beliefs,
           });
 
           let saved: ReturnType<typeof serializeDraft> | null = null;
@@ -669,6 +715,7 @@ export function createFplTools(options?: {
             bank: built.bankTenths / 10,
             averageScore: built.averageScore,
             managerId: resolvedManagerId,
+            activeBeliefCount: beliefs?.size ?? 0,
             picks: built.picks.map(compactDraftPick),
             saved,
             rules: {
@@ -677,7 +724,7 @@ export function createFplTools(options?: {
               formationHint: "XI suggested as 4-4-2; positions 12–15 are bench",
             },
             disclaimer:
-              "Heuristic squad from form, xGI, availability, and fixture difficulty. Validate before locking in FPL.",
+              "Heuristic squad from form, xGI, availability, fixture difficulty, and your private form beliefs. Validate before locking in FPL.",
           };
         }),
     }),
@@ -750,6 +797,199 @@ export function createFplTools(options?: {
             return { error: `Draft ${draftId} was not found.` };
           }
           return { deleted: deleted.id };
+        }),
+    }),
+
+    upsert_player_belief: tool({
+      description:
+        "Create or update the signed-in user's private form belief for one player. Beliefs adjust recommendation scores used by get_suggestions and suggest_squad. Never invent beliefs without API or web evidence; cite sources in rationale.",
+      inputSchema: z.object({
+        playerId: playerIdSchema,
+        formBelief: z
+          .number()
+          .min(-MAX_ABS_FORM_BELIEF)
+          .max(MAX_ABS_FORM_BELIEF)
+          .describe(
+            `Delta vs official FPL form (−${MAX_ABS_FORM_BELIEF}…+${MAX_ABS_FORM_BELIEF}). Positive = expect better form than the API.`,
+          ),
+        minutesRisk: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe("0–1 chance of reduced minutes / rotation risk."),
+        confidence: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe("0–1 how strongly scoring should trust this prior."),
+        ceiling: z.number().optional().describe("Optional upside hint."),
+        floor: z.number().optional().describe("Optional downside hint."),
+        horizonGw: z
+          .number()
+          .int()
+          .min(1)
+          .max(10)
+          .optional()
+          .describe("How many gameweeks this prior covers (also sets soft expiry)."),
+        rationale: z
+          .string()
+          .min(8)
+          .max(600)
+          .describe("Short evidence grounded in API stats and/or web search."),
+        sources: z
+          .array(z.string().min(1).max(200))
+          .max(8)
+          .optional()
+          .describe("URLs, tool names, or short source labels."),
+      }),
+      execute: async ({
+        playerId,
+        formBelief,
+        minutesRisk,
+        confidence,
+        ceiling,
+        floor,
+        horizonGw,
+        rationale,
+        sources,
+      }) =>
+        runFplTool(async () => {
+          if (!userId) {
+            return {
+              error: "No signed-in user available for private belief storage.",
+            };
+          }
+          const bootstrap = await getBootstrapStatic();
+          const element = bootstrap.elements.find((e) => e.id === playerId);
+          if (!element) {
+            return { error: `Player ${playerId} was not found.` };
+          }
+          const row = await upsertUserPlayerBelief({
+            userId,
+            elementId: playerId,
+            formBelief,
+            minutesRisk,
+            confidence,
+            ceiling,
+            floor,
+            horizonGw,
+            rationale,
+            sources,
+          });
+          const belief = serializeBelief(row);
+          return {
+            player: {
+              id: element.id,
+              name: element.web_name,
+              team: bootstrap.teams.find((t) => t.id === element.team)
+                ?.short_name,
+              status: element.status,
+              form: Number(element.form),
+            },
+            belief,
+            note: "Belief is private to this user and will adjust scores in get_suggestions / suggest_squad.",
+          };
+        }),
+    }),
+
+    list_player_beliefs: tool({
+      description:
+        "List the signed-in user's active private player form beliefs (most recently updated first).",
+      inputSchema: z.object({
+        limit: z.number().int().min(1).max(100).optional(),
+      }),
+      execute: async ({ limit = 30 }) =>
+        runFplTool(async () => {
+          if (!userId) {
+            return {
+              error: "No signed-in user available for private belief storage.",
+            };
+          }
+          const [rows, bootstrap] = await Promise.all([
+            listActiveUserBeliefs(userId, limit),
+            getBootstrapStatic(),
+          ]);
+          const byId = new Map(bootstrap.elements.map((e) => [e.id, e]));
+          return {
+            beliefs: rows.map((row) => {
+              const belief = serializeBelief(row);
+              const element = byId.get(row.elementId);
+              return {
+                ...belief,
+                name: element?.web_name ?? String(row.elementId),
+                team: element
+                  ? bootstrap.teams.find((t) => t.id === element.team)?.short_name
+                  : undefined,
+                position: element
+                  ? bootstrap.element_types.find(
+                      (t) => t.id === element.element_type,
+                    )?.singular_name_short
+                  : undefined,
+              };
+            }),
+          };
+        }),
+    }),
+
+    get_player_belief: tool({
+      description:
+        "Fetch the signed-in user's active private form belief for one player, including the score delta applied in construction.",
+      inputSchema: z.object({
+        playerId: playerIdSchema,
+      }),
+      execute: async ({ playerId }) =>
+        runFplTool(async () => {
+          if (!userId) {
+            return {
+              error: "No signed-in user available for private belief storage.",
+            };
+          }
+          const row = await getActiveUserBelief(userId, playerId);
+          if (!row) {
+            return {
+              playerId,
+              belief: null,
+              note: "No active belief for this player.",
+            };
+          }
+          const bootstrap = await getBootstrapStatic();
+          const element = bootstrap.elements.find((e) => e.id === playerId);
+          return {
+            player: element
+              ? {
+                  id: element.id,
+                  name: element.web_name,
+                  team: bootstrap.teams.find((t) => t.id === element.team)
+                    ?.short_name,
+                  form: Number(element.form),
+                  status: element.status,
+                }
+              : { id: playerId },
+            belief: serializeBelief(row),
+          };
+        }),
+    }),
+
+    clear_player_belief: tool({
+      description:
+        "Delete the signed-in user's private form belief for one player (e.g. after injury news flips or the prior expires).",
+      inputSchema: z.object({
+        playerId: playerIdSchema,
+      }),
+      execute: async ({ playerId }) =>
+        runFplTool(async () => {
+          if (!userId) {
+            return {
+              error: "No signed-in user available for private belief storage.",
+            };
+          }
+          const deleted = await clearUserPlayerBelief(userId, playerId);
+          if (!deleted) {
+            return { error: `No belief found for player ${playerId}.` };
+          }
+          return { deleted: deleted.elementId };
         }),
     }),
   };

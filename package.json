@@ -20,6 +20,7 @@
     "@assistant-ui/react-markdown": "^0.14.7",
     "@auth/drizzle-adapter": "^1.11.3",
     "@base-ui/react": "^1.6.0",
+    "@duckdb/node-api": "1.5.5-r.3",
     "ai": "^7.0.37",
     "assistant-stream": "^0.3.31",
     "class-variance-authority": "^0.7.1",

@@ -46,6 +46,7 @@ import {
   researchTargetsFromSuggestions,
   toCompactSuggestionPlayer,
 } from "./suggestion-evidence";
+import { runFplAnalysis } from "./duckdb-analysis";
 import {
   archiveFormThesis,
   createFormThesis,
@@ -234,6 +235,42 @@ export function createFplTools(options?: {
                 ? `${f.team_h_score}-${f.team_a_score}`
                 : null,
           }));
+        }),
+    }),
+
+    analyze_fpl_data: tool({
+      description:
+        "Run arbitrary DuckDB SQL against a fresh in-memory FPL snapshot. Tables: players (player stats and price), teams (team strengths), fixtures (one row per match with home/away FDR), and player_beliefs (only the signed-in user's active beliefs). Use CTEs, joins, window functions, and aggregation to rank or compare. `fixtures` has one row per fixture, so derive a team's schedule with a UNION ALL of home/away rows. FDR is 1 easiest to 5 hardest. The database is discarded after this analysis; no data is persisted.",
+      inputSchema: z.object({
+        sql: z
+          .string()
+          .min(1)
+          .max(20_000)
+          .describe(
+            "DuckDB SQL to run. Example: SELECT position, AVG(form) AS average_form FROM players GROUP BY position ORDER BY average_form DESC",
+          ),
+        rowLimit: z
+          .number()
+          .int()
+          .min(1)
+          .max(1_000)
+          .optional()
+          .describe("Maximum result rows to return (defaults to 200)."),
+      }),
+      execute: async ({ sql, rowLimit }) =>
+        runFplTool(async () => {
+          const [bootstrap, fixtures, beliefs] = await Promise.all([
+            getBootstrapStatic(),
+            getFixtures(),
+            userId ? getActiveBeliefMap(userId) : Promise.resolve(undefined),
+          ]);
+          return runFplAnalysis({
+            bootstrap,
+            fixtures,
+            beliefs,
+            sql,
+            rowLimit,
+          });
         }),
     }),
 

@@ -35,7 +35,7 @@ App-local (Postgres + analysis, not FPL API):
 |------------|--------|-----------|---------|
 | Legal 15-player builder | `src/lib/fpl/squad.ts` | `suggest_squad` | `draft_100` (£100.0m) or `wildcard` (manager value+bank); rules: 2/5/5/3, max 3/club |
 | Persisted drafts | `squad_drafts` table | `list_squad_drafts`, `get_squad_draft`, `delete_squad_draft` | Per-user draft storage; REST at `/api/drafts` |
-| Private form theses | `src/lib/fpl/theses.ts` + `form_theses` / `player_beliefs` | `create_form_thesis`, `synthesize_form_thesis`, `upsert_player_belief`, … | Per-user thesis → beliefs → synthesis → squad; UI cards in chat + rail |
+| Private form theses | `src/lib/fpl/theses.ts` + `form_theses` / `player_beliefs` | `create_form_thesis`, `compute_player_expectation`, `synthesize_form_thesis`, `upsert_player_belief`, … | Per-user thesis → quantified beliefs (expectedPoints) → synthesis → squad; UI cards in chat + rail |
 
 Read `references/endpoints.md` for field notes, IDs, and caveats.
 
@@ -51,7 +51,7 @@ Read `references/endpoints.md` for field notes, IDs, and caveats.
 8. Preseason / missing picks often return 404 — surface that clearly. Prefer `suggest_squad` with `mode=draft_100` when wildcard value is unavailable.
 9. Space `/element-summary/` calls; do not batch-fetch all players unless explicitly required.
 10. For injury/press/news beyond API `news` fields, use Kimi `$web_search` / the `fpl-web-search` skill.
-11. Form theses/beliefs are **per signed-in user only**. Workflow: `create_form_thesis` → upsert beliefs → `synthesize_form_thesis` → `suggest_squad`. Never share across users.
+11. Form theses/beliefs are **per signed-in user only**. Workflow: `create_form_thesis` → `compute_player_expectation` (quantify) → upsert beliefs → `synthesize_form_thesis` → `suggest_squad`. Never share across users. `expectedPoints` comes from the calculation tool / upsert auto-fill — do not invent it.
 
 ## Quick curl checks
 

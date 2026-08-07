@@ -18,6 +18,9 @@ describe("thesis tool result parsing", () => {
       minutesRisk: 0.2,
       confidence: 0.8,
       beliefDelta: 1.2,
+      expectedPoints: 18.4,
+      ceiling: 21,
+      floor: 15,
       horizonGw: 3,
       rationale: "Underlying xGI strong",
       sources: ["get_player_detailed_data"],
@@ -25,6 +28,9 @@ describe("thesis tool result parsing", () => {
     expect(belief.name).toBe("Saka");
     expect(belief.formBelief).toBe(1.5);
     expect(belief.beliefDelta).toBe(1.2);
+    expect(belief.expectedPoints).toBe(18.4);
+    expect(belief.ceiling).toBe(21);
+    expect(belief.floor).toBe(15);
   });
 
   it("builds an active thesis view from upsert-style results", () => {

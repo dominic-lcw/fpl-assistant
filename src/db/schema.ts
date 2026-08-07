@@ -250,9 +250,14 @@ export const playerBeliefs = pgTable(
     formBelief: real("form_belief").notNull().default(0),
     /** 0–1 chance of reduced minutes / rotation risk. */
     minutesRisk: real("minutes_risk").notNull().default(0),
-    /** Optional upside / downside hints for captaincy narrative. */
+    /** Optional upside / downside hints for captaincy narrative (points). */
     ceiling: real("ceiling"),
     floor: real("floor"),
+    /**
+     * Quantified expected points over horizonGw from FPL baseline + belief priors.
+     * Computed on upsert via computeBeliefExpectation; not LLM-invented.
+     */
+    expectedPoints: real("expected_points"),
     /** 0–1 how strongly scoring should trust this prior. */
     confidence: real("confidence").notNull().default(0.5),
     /** How many gameweeks this prior is meant to cover. */

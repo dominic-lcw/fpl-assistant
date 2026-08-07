@@ -43,16 +43,26 @@ export function BeliefCard({
             </span>
           </p>
         </div>
-        <p
-          className={cn(
-            "shrink-0 tabular-nums text-xs font-semibold",
-            deltaPositive
-              ? "text-emerald-700 dark:text-emerald-300"
-              : "text-rose-700 dark:text-rose-300",
-          )}
-        >
-          Δ {signed(belief.beliefDelta)}
-        </p>
+        <div className="shrink-0 text-right">
+          {belief.expectedPoints != null ? (
+            <p className="tabular-nums text-sm font-semibold">
+              {belief.expectedPoints.toFixed(1)}
+              <span className="text-muted-foreground ml-1 text-[0.65rem] font-normal">
+                xPts/{belief.horizonGw}gw
+              </span>
+            </p>
+          ) : null}
+          <p
+            className={cn(
+              "tabular-nums text-xs font-semibold",
+              deltaPositive
+                ? "text-emerald-700 dark:text-emerald-300"
+                : "text-rose-700 dark:text-rose-300",
+            )}
+          >
+            Δ {signed(belief.beliefDelta)}
+          </p>
+        </div>
       </div>
       <dl className="text-muted-foreground mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[0.7rem] tabular-nums">
         <div>
@@ -73,6 +83,14 @@ export function BeliefCard({
             {(belief.confidence * 100).toFixed(0)}%
           </dd>
         </div>
+        {belief.floor != null && belief.ceiling != null ? (
+          <div>
+            <dt className="inline">band </dt>
+            <dd className="text-foreground inline font-medium">
+              {belief.floor.toFixed(1)}–{belief.ceiling.toFixed(1)}
+            </dd>
+          </div>
+        ) : null}
       </dl>
       {!compact && belief.rationale ? (
         <p className="text-muted-foreground mt-1.5 text-xs leading-relaxed">
@@ -235,6 +253,83 @@ function ClearBeliefRender(
   );
 }
 
+type ExpectationToolResult = {
+  error?: string;
+  player?: {
+    name?: string;
+    team?: string;
+    position?: string;
+    form?: number;
+    epNext?: number;
+  };
+  expectation?: {
+    baselinePerGw?: number;
+    adjustedPerGw?: number;
+    expectedPoints?: number;
+    suggestedCeiling?: number;
+    suggestedFloor?: number;
+    horizonGw?: number;
+    formBelief?: number;
+    minutesRisk?: number;
+    confidence?: number;
+    formula?: string;
+  };
+  note?: string;
+};
+
+function ComputeExpectationRender(
+  props: ToolCallMessagePartProps<Record<string, unknown>, ExpectationToolResult>,
+) {
+  const { result, status } = props;
+  if (status?.type !== "complete" || !result || result.error) {
+    return <ToolFallback {...props} />;
+  }
+  const exp = result.expectation;
+  const player = result.player;
+  return (
+    <div className="border-border/70 my-2 w-full rounded-xl border px-3 py-3">
+      <p className="text-sm font-medium">Expected points</p>
+      {player?.name ? (
+        <p className="text-muted-foreground mt-0.5 text-xs">
+          {[player.name, player.team, player.position]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
+      ) : null}
+      {exp ? (
+        <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs tabular-nums sm:grid-cols-4">
+          <div>
+            <dt className="text-muted-foreground">Baseline /gw</dt>
+            <dd className="font-medium">{Number(exp.baselinePerGw ?? 0).toFixed(2)}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Adjusted /gw</dt>
+            <dd className="font-medium">{Number(exp.adjustedPerGw ?? 0).toFixed(2)}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">
+              xPts / {exp.horizonGw ?? "?"}gw
+            </dt>
+            <dd className="text-base font-semibold">
+              {Number(exp.expectedPoints ?? 0).toFixed(1)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Band</dt>
+            <dd className="font-medium">
+              {Number(exp.suggestedFloor ?? 0).toFixed(1)}–
+              {Number(exp.suggestedCeiling ?? 0).toFixed(1)}
+            </dd>
+          </div>
+        </dl>
+      ) : null}
+      {result.note ? (
+        <p className="text-muted-foreground mt-2 text-[0.7rem]">{result.note}</p>
+      ) : null}
+    </div>
+  );
+}
+
 type ThesisToolResult = {
   error?: string;
   thesis?: Record<string, unknown>;
@@ -376,6 +471,11 @@ function ListThesesRender(
 export const UpsertPlayerBeliefToolUI = makeAssistantToolUI({
   toolName: "upsert_player_belief",
   render: UpsertBeliefRender,
+});
+
+export const ComputePlayerExpectationToolUI = makeAssistantToolUI({
+  toolName: "compute_player_expectation",
+  render: ComputeExpectationRender,
 });
 
 export const ListPlayerBeliefsToolUI = makeAssistantToolUI({

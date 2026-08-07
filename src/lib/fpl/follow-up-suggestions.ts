@@ -86,13 +86,19 @@ export function buildFollowUpsFromMessages(
       prompts.push("Ask me 2 clarifying questions before finalising transfers");
     }
 
-    if (call.toolName === "upsert_player_belief" || call.toolName === "list_player_beliefs") {
+    if (
+      call.toolName === "upsert_player_belief" ||
+      call.toolName === "list_player_beliefs" ||
+      call.toolName === "compute_player_expectation"
+    ) {
       prompts.push("Synthesize this form thesis, then build a squad from it");
       prompts.push("Add another belief for a contested midfielder or forward");
     }
 
     if (call.toolName === "create_form_thesis" || call.toolName === "get_form_thesis") {
-      prompts.push("Research 3 players and upsert form beliefs into this thesis");
+      prompts.push(
+        "Compute expected points for 3 contested players, then upsert beliefs",
+      );
       prompts.push("Ask me about risk appetite before synthesizing");
     }
 

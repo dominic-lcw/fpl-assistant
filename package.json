@@ -10,7 +10,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "node scripts/db-migrate.mjs",
     "db:proxy": "bash scripts/db-proxy.sh"
   },
   "dependencies": {

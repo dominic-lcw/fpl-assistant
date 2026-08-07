@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   makeAssistantToolUI,
   type ToolCallMessagePartProps,
 } from "@assistant-ui/react";
+import { CircleHelpIcon } from "lucide-react";
 
 import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
 import {
@@ -12,6 +13,15 @@ import {
   useThesisContext,
   type ThesisBeliefView,
 } from "@/components/fpl/thesis-context";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 function signed(value: number, digits = 1) {
@@ -19,89 +29,161 @@ function signed(value: number, digits = 1) {
   return value > 0 ? `+${abs}` : value < 0 ? `−${abs}` : abs;
 }
 
+function CalculationDialog({ belief }: { belief: ThesisBeliefView }) {
+  const [open, setOpen] = useState(false);
+  const adjustedPerGw =
+    belief.expectedPoints == null
+      ? null
+      : belief.expectedPoints / belief.horizonGw;
+  const formAdjustment = belief.formBelief * belief.confidence * 0.75;
+  const minutesFactor = 1 - belief.minutesRisk * belief.confidence;
+  const baselinePerGw =
+    adjustedPerGw != null && minutesFactor > 0
+      ? adjustedPerGw / minutesFactor - formAdjustment
+      : null;
+  const spread = (1 - belief.confidence) * 0.35 + 0.12;
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            aria-label={`Explain ${belief.name ?? "player"} belief calculation`}
+            className="text-muted-foreground hover:text-foreground -my-1 -mr-1"
+          />
+        }
+      >
+        <CircleHelpIcon />
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            How {belief.name ?? `player #${belief.elementId}`} is calculated
+          </DialogTitle>
+          <DialogDescription>
+            The stored belief inputs are used to produce the displayed
+            synthesized values.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 text-sm">
+          <section>
+            <p className="font-medium">Expected points</p>
+            <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+              xPts = max(0, (FPL baseline + form belief × confidence × 0.75) ×
+              (1 − minutes risk × confidence)) × gameweeks
+            </p>
+            {adjustedPerGw != null ? (
+              <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs tabular-nums">
+                <div>
+                  <dt className="text-muted-foreground">
+                    Reconstructed FPL baseline / GW
+                  </dt>
+                  <dd className="font-medium">
+                    {baselinePerGw == null
+                      ? "Not recoverable"
+                      : baselinePerGw.toFixed(2)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Adjusted / GW</dt>
+                  <dd className="font-medium">{adjustedPerGw.toFixed(2)}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Form adjustment / GW</dt>
+                  <dd className="font-medium">{signed(formAdjustment, 2)}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Minutes factor</dt>
+                  <dd className="font-medium">{minutesFactor.toFixed(2)}×</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Horizon</dt>
+                  <dd className="font-medium">{belief.horizonGw} GW</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">xPts</dt>
+                  <dd className="font-medium">
+                    {belief.expectedPoints?.toFixed(1)}
+                  </dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="text-muted-foreground mt-2 text-xs">
+                Expected points have not been computed for this belief.
+              </p>
+            )}
+          </section>
+          <section>
+            <p className="font-medium">Recommendation delta</p>
+            <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+              Δ = (form belief × confidence × 1.4) − (minutes risk ×
+              confidence × 3), capped between −4 and +4.
+            </p>
+            <p className="mt-1 text-xs tabular-nums">
+              {signed(belief.formBelief, 1)} × {belief.confidence.toFixed(2)} ×
+              {" "}1.4 − {belief.minutesRisk.toFixed(2)} ×{" "}
+              {belief.confidence.toFixed(2)} × 3 ={" "}
+              <span className="font-medium">{signed(belief.beliefDelta, 2)}</span>
+            </p>
+          </section>
+          {belief.floor != null && belief.ceiling != null ? (
+            <section>
+              <p className="font-medium">Range</p>
+              <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+                The range applies a {(spread * 100).toFixed(1)}% spread around
+                xPts. Lower confidence widens it.
+              </p>
+              <p className="mt-1 text-xs tabular-nums">
+                {belief.expectedPoints?.toFixed(1)} × (1 ± {spread.toFixed(3)})
+                {" "}= {belief.floor.toFixed(1)}–{belief.ceiling.toFixed(1)}
+              </p>
+            </section>
+          ) : null}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function BeliefCard({
   belief,
-  compact = false,
 }: {
   belief: ThesisBeliefView;
-  compact?: boolean;
 }) {
   const deltaPositive = belief.beliefDelta >= 0;
   return (
-    <article
-      className={cn(
-        "border-border/60 bg-background/80 rounded-lg border px-3 py-2",
-        compact && "px-2 py-1.5",
-      )}
-    >
-      <div className="flex items-baseline justify-between gap-2">
+    <article className="border-border/60 bg-background/80 rounded-lg border px-2.5 py-1.5">
+      <div className="flex min-w-0 items-center gap-2 text-xs">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium">
+          <p className="truncate font-medium">
             {belief.name ?? `#${belief.elementId}`}
-            <span className="text-muted-foreground ml-1.5 text-xs font-normal">
+            <span className="text-muted-foreground ml-1 font-normal">
               {[belief.team, belief.position].filter(Boolean).join(" · ")}
             </span>
           </p>
         </div>
-        <div className="shrink-0 text-right">
+        <div className="text-muted-foreground ml-auto flex shrink-0 items-center gap-2 tabular-nums">
           {belief.expectedPoints != null ? (
-            <p className="tabular-nums text-sm font-semibold">
-              {belief.expectedPoints.toFixed(1)}
-              <span className="text-muted-foreground ml-1 text-[0.65rem] font-normal">
-                xPts/{belief.horizonGw}gw
-              </span>
-            </p>
+            <span className="text-foreground font-semibold">
+              {belief.expectedPoints.toFixed(1)} xPts/{belief.horizonGw}
+            </span>
           ) : null}
-          <p
+          <span
             className={cn(
-              "tabular-nums text-xs font-semibold",
+              "font-semibold",
               deltaPositive
                 ? "text-emerald-700 dark:text-emerald-300"
                 : "text-rose-700 dark:text-rose-300",
             )}
           >
             Δ {signed(belief.beliefDelta)}
-          </p>
+          </span>
+          <CalculationDialog belief={belief} />
         </div>
       </div>
-      <dl className="text-muted-foreground mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[0.7rem] tabular-nums">
-        <div>
-          <dt className="inline">form </dt>
-          <dd className="text-foreground inline font-medium">
-            {signed(belief.formBelief)}
-          </dd>
-        </div>
-        <div>
-          <dt className="inline">mins risk </dt>
-          <dd className="text-foreground inline font-medium">
-            {(belief.minutesRisk * 100).toFixed(0)}%
-          </dd>
-        </div>
-        <div>
-          <dt className="inline">conf </dt>
-          <dd className="text-foreground inline font-medium">
-            {(belief.confidence * 100).toFixed(0)}%
-          </dd>
-        </div>
-        {belief.floor != null && belief.ceiling != null ? (
-          <div>
-            <dt className="inline">band </dt>
-            <dd className="text-foreground inline font-medium">
-              {belief.floor.toFixed(1)}–{belief.ceiling.toFixed(1)}
-            </dd>
-          </div>
-        ) : null}
-      </dl>
-      {!compact && belief.rationale ? (
-        <p className="text-muted-foreground mt-1.5 text-xs leading-relaxed">
-          {belief.rationale}
-        </p>
-      ) : null}
-      {!compact && belief.sources.length > 0 ? (
-        <p className="text-muted-foreground/80 mt-1 text-[0.65rem]">
-          Sources: {belief.sources.join(" · ")}
-        </p>
-      ) : null}
     </article>
   );
 }

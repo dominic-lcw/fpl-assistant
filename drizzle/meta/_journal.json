@@ -15,6 +15,20 @@
       "when": 1775692800000,
       "tag": "0001_squad_drafts",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1775779200000,
+      "tag": "0002_player_beliefs",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1775865600000,
+      "tag": "0003_form_theses",
+      "breakpoints": true
     }
   ]
 }

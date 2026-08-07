@@ -15,6 +15,8 @@ import {
   type DraftPickView,
   type DraftPosition,
 } from "@/components/fpl/draft-types";
+import { BeliefCard } from "@/components/fpl/beliefs-tool-ui";
+import { useThesisContext } from "@/components/fpl/thesis-context";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -173,6 +175,71 @@ function DraftStatsFooter() {
   );
 }
 
+function ThesisRailSection() {
+  const { activeThesis, loading, refreshActiveThesis } = useThesisContext();
+
+  return (
+    <div className="border-border flex min-h-0 flex-col border-b">
+      <div className="flex shrink-0 items-start justify-between gap-2 px-3 py-2.5">
+        <div className="min-w-0">
+          <p className="text-muted-foreground text-[0.7rem] font-semibold tracking-[0.12em] uppercase">
+            Thesis
+          </p>
+          <p className="truncate text-sm font-medium">
+            {activeThesis?.title ?? "No active thesis"}
+          </p>
+          {activeThesis ? (
+            <p className="text-muted-foreground mt-0.5 text-xs">
+              <span className="uppercase tracking-wide">{activeThesis.status}</span>
+              {" · "}
+              {activeThesis.beliefCount} belief
+              {activeThesis.beliefCount === 1 ? "" : "s"}
+            </p>
+          ) : (
+            <p className="text-muted-foreground mt-0.5 text-xs">
+              Ask chat to create a form thesis, then add player beliefs.
+            </p>
+          )}
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          aria-label="Refresh thesis"
+          onClick={() => void refreshActiveThesis()}
+          disabled={loading}
+        >
+          {loading ? (
+            <LoaderIcon className="animate-spin" />
+          ) : (
+            <RefreshCwIcon />
+          )}
+        </Button>
+      </div>
+      {activeThesis?.summary ? (
+        <p className="text-muted-foreground px-3 pb-2 text-[0.7rem] leading-relaxed">
+          {activeThesis.summary}
+        </p>
+      ) : null}
+      <div className="max-h-40 min-h-0 overflow-y-auto px-3 pb-2">
+        {activeThesis && activeThesis.beliefs.length > 0 ? (
+          <ul className="flex flex-col gap-1.5">
+            {activeThesis.beliefs.map((belief) => (
+              <li key={belief.id || belief.elementId}>
+                <BeliefCard belief={belief} compact />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-muted-foreground/80 py-1 text-xs italic">
+            Beliefs will appear here as the thesis is built.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function DraftSelectionBody() {
   const {
     activeDraft,
@@ -287,7 +354,7 @@ function DraftSelectionBody() {
   );
 }
 
-/** Desktop right rail: vertical split — selection on top, stats below. */
+/** Desktop right rail: vertical split — thesis + selection on top, stats below. */
 export function DraftSideRail({ className }: { className?: string }) {
   return (
     <aside
@@ -297,11 +364,16 @@ export function DraftSideRail({ className }: { className?: string }) {
       )}
     >
       <ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
-        <ResizablePanel defaultSize="68%" minSize="40%">
-          <DraftSelectionBody />
+        <ResizablePanel defaultSize="72%" minSize="40%">
+          <div className="flex h-full min-h-0 flex-col">
+            <ThesisRailSection />
+            <div className="min-h-0 flex-1">
+              <DraftSelectionBody />
+            </div>
+          </div>
         </ResizablePanel>
         <ResizableHandle withHandle />
-        <ResizablePanel defaultSize="32%" minSize="18%">
+        <ResizablePanel defaultSize="28%" minSize="18%">
           <DraftStatsFooter />
         </ResizablePanel>
       </ResizablePanelGroup>
@@ -356,7 +428,12 @@ export function MobileDraftPanel() {
         <div className="h-[calc(100dvh-2.75rem)]">
           <ResizablePanelGroup orientation="vertical" className="h-full">
             <ResizablePanel defaultSize="70%" minSize="40%">
-              <DraftSelectionBody />
+              <div className="flex h-full min-h-0 flex-col">
+                <ThesisRailSection />
+                <div className="min-h-0 flex-1">
+                  <DraftSelectionBody />
+                </div>
+              </div>
             </ResizablePanel>
             <ResizableHandle withHandle />
             <ResizablePanel defaultSize="30%" minSize="18%">

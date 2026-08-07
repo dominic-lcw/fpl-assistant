@@ -306,6 +306,11 @@ export interface PlayerFormSummary {
     difficulty: number;
   }>;
   recommendationScore: number;
+  /** Score contribution from the signed-in user's form belief prior. */
+  beliefDelta?: number;
+  formBelief?: number;
+  minutesRisk?: number;
+  beliefConfidence?: number;
 }
 
 export interface SquadPlayerSummary extends PlayerFormSummary {

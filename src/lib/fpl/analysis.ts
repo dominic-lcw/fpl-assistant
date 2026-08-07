@@ -1,3 +1,7 @@
+import {
+  computeBeliefScoreDelta,
+  type PlayerBeliefAdjustment,
+} from "./beliefs";
 import type {
   BootstrapStatic,
   ElementSummary,
@@ -9,6 +13,9 @@ import type {
   RelevantGameweek,
   SquadPlayerSummary,
 } from "./types";
+
+/** Modest weight for FPL's own expected points next GW. */
+const EP_NEXT_WEIGHT = 0.45;
 
 export function getRelevantGameweek(
   bootstrap: BootstrapStatic,
@@ -151,6 +158,7 @@ export function buildPlayerFormSummary(
   fixtures: Fixture[],
   fromEvent: number,
   detail?: ElementSummary,
+  belief?: PlayerBeliefAdjustment | null,
 ): PlayerFormSummary {
   const recent = detail
     ? summarizeRecentForm(detail.history)
@@ -173,6 +181,7 @@ export function buildPlayerFormSummary(
   const form = num(element.form);
   const ppg = num(element.points_per_game);
   const xgi = num(element.expected_goal_involvements);
+  const epNext = num(element.ep_next);
   const availability =
     element.status === "a"
       ? 1
@@ -180,15 +189,19 @@ export function buildPlayerFormSummary(
         ? element.chance_of_playing_next_round / 100
         : 0.5;
 
+  const beliefDelta = belief ? computeBeliefScoreDelta(belief) : 0;
+
   const recommendationScore =
     form * 1.4 +
     ppg * 1.1 +
     recent.recentPoints * 0.35 +
     recent.recentXgi * 1.2 +
     xgi * 0.8 +
+    epNext * EP_NEXT_WEIGHT +
     fixtureRunScore * 0.9 +
     availability * 2 -
-    (element.status !== "a" ? 2 : 0);
+    (element.status !== "a" ? 2 : 0) +
+    beliefDelta;
 
   return {
     id: element.id,
@@ -211,6 +224,14 @@ export function buildPlayerFormSummary(
     fixtureRunScore: Number(fixtureRunScore.toFixed(2)),
     nextFixtures,
     recommendationScore: Number(recommendationScore.toFixed(2)),
+    ...(belief
+      ? {
+          beliefDelta,
+          formBelief: belief.formBelief,
+          minutesRisk: belief.minutesRisk,
+          beliefConfidence: belief.confidence,
+        }
+      : {}),
   };
 }
 
@@ -219,6 +240,7 @@ export function buildSquadSummaries(
   bootstrap: BootstrapStatic,
   fixtures: Fixture[],
   fromEvent: number,
+  beliefs?: Map<number, PlayerBeliefAdjustment>,
 ): SquadPlayerSummary[] {
   const byId = new Map(bootstrap.elements.map((e) => [e.id, e]));
   return picks.picks
@@ -230,6 +252,8 @@ export function buildSquadSummaries(
         bootstrap,
         fixtures,
         fromEvent,
+        undefined,
+        beliefs?.get(element.id),
       );
       return {
         ...summary,
@@ -249,6 +273,7 @@ export function buildRecommendations(params: {
   fixtures: Fixture[];
   picks: ManagerPicks;
   gameweek?: RelevantGameweek;
+  beliefs?: Map<number, PlayerBeliefAdjustment>;
 }): RecommendationBundle {
   const gameweek = params.gameweek ?? getRelevantGameweek(params.bootstrap);
   const fromEvent = gameweek.id > 0 ? gameweek.id : 1;
@@ -257,6 +282,7 @@ export function buildRecommendations(params: {
     params.bootstrap,
     params.fixtures,
     fromEvent,
+    params.beliefs,
   );
 
   const squadIds = new Set(squad.map((p) => p.id));
@@ -275,10 +301,16 @@ export function buildRecommendations(params: {
   const market = params.bootstrap.elements
     .filter((e) => !squadIds.has(e.id) && e.status === "a" && e.minutes > 0)
     .map((e) =>
-      buildPlayerFormSummary(e, params.bootstrap, params.fixtures, fromEvent),
+      buildPlayerFormSummary(
+        e,
+        params.bootstrap,
+        params.fixtures,
+        fromEvent,
+        undefined,
+        params.beliefs?.get(e.id),
+      ),
     )
     .sort((a, b) => b.recommendationScore - a.recommendationScore);
-
   const transferInCandidates = market
     .filter((p) => {
       // Prefer players affordable relative to a weak squad member + bank

@@ -1,6 +1,7 @@
 import type { SquadDraftPick } from "@/db/schema";
 
 import { buildPlayerFormSummary } from "./analysis";
+import type { PlayerBeliefAdjustment } from "./beliefs";
 import type {
   BootstrapStatic,
   Fixture,
@@ -252,16 +253,24 @@ export function buildLegalSquad(params: {
   gameweek: RelevantGameweek;
   mode: SquadBuildMode;
   budgetTenths: number;
+  /** Per-user form beliefs keyed by element id. */
+  beliefs?: Map<number, PlayerBeliefAdjustment>;
 }): BuiltSquad {
   const fromEvent = params.gameweek.id > 0 ? params.gameweek.id : 1;
   const pool = params.bootstrap.elements
     .filter((e) => e.status === "a" || e.status === "d")
     .map((e) =>
-      buildPlayerFormSummary(e, params.bootstrap, params.fixtures, fromEvent),
+      buildPlayerFormSummary(
+        e,
+        params.bootstrap,
+        params.fixtures,
+        fromEvent,
+        undefined,
+        params.beliefs?.get(e.id),
+      ),
     )
     .filter((p) => p.cost > 0)
     .sort((a, b) => b.recommendationScore - a.recommendationScore);
-
   const remainingQuota: Record<PositionType, number> = { ...SQUAD_QUOTA };
   const clubCounts = new Map<number, number>();
   const taken = new Set<number>();

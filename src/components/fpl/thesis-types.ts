@@ -9,6 +9,9 @@ export type ThesisBeliefView = {
   minutesRisk: number;
   confidence: number;
   beliefDelta: number;
+  expectedPoints: number | null;
+  ceiling: number | null;
+  floor: number | null;
   horizonGw: number;
   rationale: string;
   sources: string[];
@@ -31,6 +34,12 @@ function num(value: unknown, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function optionalNum(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function normalizeBelief(raw: Record<string, unknown>): ThesisBeliefView {
   return {
     id: String(raw.id ?? ""),
@@ -43,6 +52,9 @@ export function normalizeBelief(raw: Record<string, unknown>): ThesisBeliefView 
     minutesRisk: num(raw.minutesRisk),
     confidence: num(raw.confidence, 0.5),
     beliefDelta: num(raw.beliefDelta),
+    expectedPoints: optionalNum(raw.expectedPoints),
+    ceiling: optionalNum(raw.ceiling),
+    floor: optionalNum(raw.floor),
     horizonGw: num(raw.horizonGw, 3),
     rationale: String(raw.rationale ?? ""),
     sources: Array.isArray(raw.sources)

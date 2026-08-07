@@ -9,6 +9,11 @@ export const MAX_ABS_FORM_BELIEF = 2;
 export const MAX_ABS_BELIEF_DELTA = 4;
 export const FORM_BELIEF_WEIGHT = 1.4;
 export const MINUTES_RISK_WEIGHT = 3;
+/**
+ * How many expected points per GW one formBelief unit adds/subtracts
+ * before minutes risk (form is roughly a 0–10 scale).
+ */
+export const FORM_BELIEF_EP_WEIGHT = 0.75;
 /** Default expiry when horizonGw is set and no explicit expiresAt. */
 export const DEFAULT_HORIZON_GW = 3;
 /** Rough days per gameweek for soft expiry. */
@@ -20,12 +25,40 @@ export type PlayerBeliefAdjustment = {
   confidence: number;
 };
 
+/** Official FPL baseline inputs for expected-points calculation. */
+export type BeliefEpBaseline = {
+  /** FPL ep_next when present. */
+  epNext: number;
+  form: number;
+  pointsPerGame: number;
+};
+
+export type BeliefExpectation = {
+  /** Official / blended expected points per GW before belief adjustment. */
+  baselinePerGw: number;
+  /** Belief-adjusted expected points per GW after minutes risk. */
+  adjustedPerGw: number;
+  /** Quantified expected points over horizonGw. */
+  expectedPoints: number;
+  /** Suggested upside band (points over horizon). */
+  suggestedCeiling: number;
+  /** Suggested downside band (points over horizon). */
+  suggestedFloor: number;
+  horizonGw: number;
+  formBelief: number;
+  minutesRisk: number;
+  confidence: number;
+  formula: string;
+};
+
 export type PlayerBeliefView = {
   id: string;
   thesisId: string;
   elementId: number;
   formBelief: number;
   minutesRisk: number;
+  /** Quantified expected points over horizonGw (from calculation). */
+  expectedPoints: number | null;
   ceiling: number | null;
   floor: number | null;
   confidence: number;
@@ -66,6 +99,80 @@ export function computeBeliefScoreDelta(
   );
 }
 
+function numBaseline(value: number): number {
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+/**
+ * Blend official FPL expected points into a per-GW baseline.
+ * Prefer ep_next; fall back to form/ppg when ep_next is missing.
+ */
+export function baselineExpectedPointsPerGw(
+  baseline: BeliefEpBaseline,
+): number {
+  const epNext = numBaseline(baseline.epNext);
+  if (epNext > 0) return Number(epNext.toFixed(2));
+  const form = numBaseline(baseline.form);
+  const ppg = numBaseline(baseline.pointsPerGame);
+  if (form <= 0 && ppg <= 0) return 0;
+  if (form <= 0) return Number(ppg.toFixed(2));
+  if (ppg <= 0) return Number(form.toFixed(2));
+  return Number((form * 0.55 + ppg * 0.45).toFixed(2));
+}
+
+/**
+ * Quantify a belief as expected points over its horizon.
+ * Uses FPL baseline EP + formBelief adjustment − minutes risk, scaled by confidence.
+ */
+export function computeBeliefExpectation(
+  baseline: BeliefEpBaseline,
+  belief: PlayerBeliefAdjustment & { horizonGw?: number },
+): BeliefExpectation {
+  const formBelief = clamp(
+    belief.formBelief,
+    -MAX_ABS_FORM_BELIEF,
+    MAX_ABS_FORM_BELIEF,
+  );
+  const minutesRisk = clamp(belief.minutesRisk, 0, 1);
+  const confidence = clamp(belief.confidence, 0, 1);
+  const horizonGw = Math.max(
+    1,
+    Math.min(10, Math.round(belief.horizonGw ?? DEFAULT_HORIZON_GW)),
+  );
+
+  const baselinePerGw = baselineExpectedPointsPerGw(baseline);
+  const formAdj =
+    formBelief * confidence * FORM_BELIEF_EP_WEIGHT;
+  const minutesFactor = 1 - minutesRisk * confidence;
+  const adjustedPerGw = Number(
+    Math.max(0, (baselinePerGw + formAdj) * minutesFactor).toFixed(2),
+  );
+  const expectedPoints = Number((adjustedPerGw * horizonGw).toFixed(2));
+
+  // Wider bands when confidence is low.
+  const spread = Number(((1 - confidence) * 0.35 + 0.12).toFixed(3));
+  const suggestedCeiling = Number(
+    (expectedPoints * (1 + spread)).toFixed(2),
+  );
+  const suggestedFloor = Number(
+    Math.max(0, expectedPoints * (1 - spread)).toFixed(2),
+  );
+
+  return {
+    baselinePerGw,
+    adjustedPerGw,
+    expectedPoints,
+    suggestedCeiling,
+    suggestedFloor,
+    horizonGw,
+    formBelief,
+    minutesRisk,
+    confidence,
+    formula:
+      "expectedPoints = max(0, (baselinePerGw + formBelief×confidence×0.75) × (1 − minutesRisk×confidence)) × horizonGw",
+  };
+}
+
 export function serializeBelief(row: PlayerBeliefRow): PlayerBeliefView {
   const formBelief = Number(row.formBelief);
   const minutesRisk = Number(row.minutesRisk);
@@ -76,6 +183,8 @@ export function serializeBelief(row: PlayerBeliefRow): PlayerBeliefView {
     elementId: row.elementId,
     formBelief,
     minutesRisk,
+    expectedPoints:
+      row.expectedPoints == null ? null : Number(row.expectedPoints),
     ceiling: row.ceiling == null ? null : Number(row.ceiling),
     floor: row.floor == null ? null : Number(row.floor),
     confidence,
@@ -163,6 +272,7 @@ export async function upsertUserPlayerBelief(params: {
   elementId: number;
   formBelief: number;
   minutesRisk?: number;
+  expectedPoints?: number | null;
   ceiling?: number | null;
   floor?: number | null;
   confidence?: number;
@@ -195,6 +305,7 @@ export async function upsertUserPlayerBelief(params: {
     elementId: params.elementId,
     formBelief,
     minutesRisk,
+    expectedPoints: params.expectedPoints ?? null,
     ceiling: params.ceiling ?? null,
     floor: params.floor ?? null,
     confidence,
@@ -214,6 +325,7 @@ export async function upsertUserPlayerBelief(params: {
       set: {
         formBelief: values.formBelief,
         minutesRisk: values.minutesRisk,
+        expectedPoints: values.expectedPoints,
         ceiling: values.ceiling,
         floor: values.floor,
         confidence: values.confidence,

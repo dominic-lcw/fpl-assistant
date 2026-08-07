@@ -40,6 +40,7 @@ import {
 } from "@/components/fpl/suggestions-tool-ui";
 import {
   ClearPlayerBeliefToolUI,
+  ComputePlayerExpectationToolUI,
   CreateFormThesisToolUI,
   GetFormThesisToolUI,
   GetPlayerBeliefToolUI,
@@ -130,6 +131,7 @@ function AssistantRuntimeShell({ authSlot }: { authSlot?: ReactNode }) {
             <GetFormThesisToolUI />
             <SynthesizeFormThesisToolUI />
             <UpsertPlayerBeliefToolUI />
+            <ComputePlayerExpectationToolUI />
             <ListPlayerBeliefsToolUI />
             <GetPlayerBeliefToolUI />
             <ClearPlayerBeliefToolUI />

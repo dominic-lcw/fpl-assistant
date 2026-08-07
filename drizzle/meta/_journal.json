@@ -29,6 +29,13 @@
       "when": 1775865600000,
       "tag": "0003_form_theses",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1775952000000,
+      "tag": "0004_belief_expected_points",
+      "breakpoints": true
     }
   ]
 }

@@ -54,7 +54,7 @@ function formatThesisContext(thesis: ActiveThesisView) {
   for (const b of thesis.beliefs.slice(0, 20)) {
     const name = b.name ?? `#${b.elementId}`;
     lines.push(
-      `- ${name} (${b.team ?? "?"} ${b.position ?? ""}): formBelief ${b.formBelief >= 0 ? "+" : ""}${b.formBelief.toFixed(1)}, minutesRisk ${b.minutesRisk.toFixed(2)}, confidence ${b.confidence.toFixed(2)}, delta ${b.beliefDelta >= 0 ? "+" : ""}${b.beliefDelta.toFixed(2)} — ${b.rationale}`,
+      `- ${name} (${b.team ?? "?"} ${b.position ?? ""}): formBelief ${b.formBelief >= 0 ? "+" : ""}${b.formBelief.toFixed(1)}, minutesRisk ${b.minutesRisk.toFixed(2)}, confidence ${b.confidence.toFixed(2)}, expectedPoints ${b.expectedPoints != null ? b.expectedPoints.toFixed(1) : "n/a"}/${b.horizonGw}gw, delta ${b.beliefDelta >= 0 ? "+" : ""}${b.beliefDelta.toFixed(2)} — ${b.rationale}`,
     );
   }
   if (thesis.status === "collecting") {
@@ -203,7 +203,7 @@ export function ThesisProvider({ children }: { children: ReactNode }) {
 
   useAssistantInstructions(
     activeThesis
-      ? "When discussing form or squad construction, prefer the Active form thesis in context. Collect beliefs with upsert_player_belief, synthesize with synthesize_form_thesis, then suggest_squad."
+      ? "When discussing form or squad construction, prefer the Active form thesis in context. Quantify with compute_player_expectation, collect beliefs with upsert_player_belief, synthesize with synthesize_form_thesis, then suggest_squad."
       : "No active form thesis. Create one with create_form_thesis before storing player beliefs.",
   );
 

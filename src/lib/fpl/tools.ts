@@ -10,6 +10,8 @@ import {
 } from "./analysis";
 import {
   clearUserPlayerBelief,
+  computeBeliefExpectation,
+  DEFAULT_HORIZON_GW,
   getBeliefForThesis,
   listBeliefsForThesis,
   MAX_ABS_FORM_BELIEF,
@@ -857,9 +859,82 @@ export function createFplTools(options?: {
         }),
     }),
 
+    compute_player_expectation: tool({
+      description:
+        "Calculate quantified expected points for a player from FPL baseline (ep_next/form/ppg) plus belief priors (formBelief, minutesRisk, confidence, horizon). Use before or instead of inventing numbers; pass the same priors into upsert_player_belief to store the result.",
+      inputSchema: z.object({
+        playerId: playerIdSchema,
+        formBelief: z
+          .number()
+          .min(-MAX_ABS_FORM_BELIEF)
+          .max(MAX_ABS_FORM_BELIEF)
+          .describe(
+            `Delta vs official FPL form (−${MAX_ABS_FORM_BELIEF}…+${MAX_ABS_FORM_BELIEF}).`,
+          ),
+        minutesRisk: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe("0–1 chance of reduced minutes / rotation risk."),
+        confidence: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe("0–1 how strongly to trust this prior."),
+        horizonGw: z
+          .number()
+          .int()
+          .min(1)
+          .max(10)
+          .optional()
+          .describe("Gameweeks to accumulate expected points over."),
+      }),
+      execute: async ({
+        playerId,
+        formBelief,
+        minutesRisk = 0,
+        confidence = 0.5,
+        horizonGw = DEFAULT_HORIZON_GW,
+      }) =>
+        runFplTool(async () => {
+          const bootstrap = await getBootstrapStatic();
+          const element = bootstrap.elements.find((e) => e.id === playerId);
+          if (!element) {
+            return { error: `Player ${playerId} was not found.` };
+          }
+          const expectation = computeBeliefExpectation(
+            {
+              epNext: Number(element.ep_next ?? 0),
+              form: Number(element.form),
+              pointsPerGame: Number(element.points_per_game),
+            },
+            { formBelief, minutesRisk, confidence, horizonGw },
+          );
+          return {
+            player: {
+              id: element.id,
+              name: element.web_name,
+              team: bootstrap.teams.find((t) => t.id === element.team)
+                ?.short_name,
+              position: bootstrap.element_types.find(
+                (t) => t.id === element.element_type,
+              )?.singular_name_short,
+              form: Number(element.form),
+              pointsPerGame: Number(element.points_per_game),
+              epNext: Number(element.ep_next ?? 0),
+              status: element.status,
+            },
+            expectation,
+            note: "Use expectation.expectedPoints / suggestedCeiling / suggestedFloor when calling upsert_player_belief (or omit them and upsert will compute the same values).",
+          };
+        }),
+    }),
+
     upsert_player_belief: tool({
       description:
-        "Add or update one player belief inside a form thesis (defaults to the active thesis). Beliefs are the atomic units of a thesis and adjust recommendation scores. Never invent beliefs without API or web evidence.",
+        "Add or update one player belief inside a form thesis (defaults to the active thesis). Automatically quantifies expectedPoints from FPL baseline + priors (and fills ceiling/floor bands when omitted). Never invent beliefs without API or web evidence.",
       inputSchema: z.object({
         playerId: playerIdSchema,
         thesisId: z
@@ -886,8 +961,26 @@ export function createFplTools(options?: {
           .max(1)
           .optional()
           .describe("0–1 how strongly scoring should trust this prior."),
-        ceiling: z.number().optional().describe("Optional upside hint."),
-        floor: z.number().optional().describe("Optional downside hint."),
+        expectedPoints: z
+          .number()
+          .min(0)
+          .max(200)
+          .optional()
+          .describe(
+            "Override quantified expected points over horizon. Prefer compute_player_expectation or omit to auto-calculate.",
+          ),
+        ceiling: z
+          .number()
+          .optional()
+          .describe(
+            "Optional upside points band. Omit to use the calculated suggestedCeiling.",
+          ),
+        floor: z
+          .number()
+          .optional()
+          .describe(
+            "Optional downside points band. Omit to use the calculated suggestedFloor.",
+          ),
         horizonGw: z
           .number()
           .int()
@@ -912,6 +1005,7 @@ export function createFplTools(options?: {
         formBelief,
         minutesRisk,
         confidence,
+        expectedPoints,
         ceiling,
         floor,
         horizonGw,
@@ -941,6 +1035,21 @@ export function createFplTools(options?: {
           if (!element) {
             return { error: `Player ${playerId} was not found.` };
           }
+          const resolvedHorizon =
+            horizonGw ?? thesis.horizonGw ?? DEFAULT_HORIZON_GW;
+          const expectation = computeBeliefExpectation(
+            {
+              epNext: Number(element.ep_next ?? 0),
+              form: Number(element.form),
+              pointsPerGame: Number(element.points_per_game),
+            },
+            {
+              formBelief,
+              minutesRisk: minutesRisk ?? 0,
+              confidence: confidence ?? 0.5,
+              horizonGw: resolvedHorizon,
+            },
+          );
           const row = await upsertUserPlayerBelief({
             userId,
             thesisId: thesis.id,
@@ -948,9 +1057,10 @@ export function createFplTools(options?: {
             formBelief,
             minutesRisk,
             confidence,
-            ceiling,
-            floor,
-            horizonGw,
+            expectedPoints: expectedPoints ?? expectation.expectedPoints,
+            ceiling: ceiling ?? expectation.suggestedCeiling,
+            floor: floor ?? expectation.suggestedFloor,
+            horizonGw: resolvedHorizon,
             rationale,
             sources,
           });
@@ -970,9 +1080,11 @@ export function createFplTools(options?: {
               team: belief.team,
               status: element.status,
               form: Number(element.form),
+              epNext: Number(element.ep_next ?? 0),
             },
             belief,
-            note: "Belief stored on this thesis. Adding beliefs sets thesis status back to collecting until synthesize_form_thesis.",
+            expectation,
+            note: "Belief stored with quantified expectedPoints. Thesis status returns to collecting until synthesize_form_thesis.",
           };
         }),
     }),
@@ -1147,6 +1259,7 @@ export function createFplTools(options?: {
           return {
             thesis: serializeThesis(row, { beliefCount: 0, beliefs: [] }),
             nextSteps: [
+              "Quantify with compute_player_expectation (FPL baseline + priors)",
               "Upsert player beliefs with evidence (upsert_player_belief)",
               "Optionally ask_user_choices for risk / differential preference",
               "Call synthesize_form_thesis, then suggest_squad",

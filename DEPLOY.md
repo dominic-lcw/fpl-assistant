@@ -224,10 +224,22 @@ gcloud run services update "$SERVICE" \
 
 In [APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials) → your OAuth 2.0 Web client:
 
-- **Authorized JavaScript origins:** `https://YOUR-SERVICE-xxxxx.run.app`
-- **Authorized redirect URIs:** `https://YOUR-SERVICE-xxxxx.run.app/api/auth/callback/google`
+- **Authorized JavaScript origins:**
+  - `https://YOUR-SERVICE-xxxxx.run.app`
+  - `https://fplassistant.app` (custom domain)
+- **Authorized redirect URIs:**
+  - `https://YOUR-SERVICE-xxxxx.run.app/api/auth/callback/google`
+  - `https://fplassistant.app/api/auth/callback/google`
 
-Keep `http://localhost:3000` entries for local dev. Changes apply immediately (no redeploy).
+Also set Cloud Run `AUTH_URL` to the public site users open (prefer the custom domain):
+
+```bash
+gcloud run services update "$SERVICE" \
+  --region="$REGION" \
+  --update-env-vars="AUTH_URL=https://fplassistant.app,AUTH_TRUST_HOST=true,ADMIN_EMAILS=leungcheuk209@gmail.com"
+```
+
+Keep `http://localhost:3000` entries for local dev. OAuth console changes apply immediately (no redeploy); `AUTH_URL` / env changes need a Cloud Run update.
 
 ## 8. Redeploy after code changes
 

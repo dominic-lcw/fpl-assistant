@@ -73,4 +73,21 @@ describe("draft-types", () => {
     expect(draft?.title).toBe("Saved draft");
     expect(draft?.picks[0]?.webName).toBe("Raya");
   });
+
+  it("does not create a draft from a failed suggestion", () => {
+    expect(
+      draftFromSuggestResult({
+        error: "Active form thesis is still collecting beliefs.",
+      }),
+    ).toBeNull();
+  });
+
+  it("preserves a persisted draft status", () => {
+    const draft = draftFromSuggestResult({
+      mode: "draft_100",
+      picks: [],
+      saved: { id: "abc", status: "archived" },
+    });
+    expect(draft?.status).toBe("archived");
+  });
 });

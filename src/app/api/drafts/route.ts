@@ -145,19 +145,12 @@ export async function POST(req: Request) {
     budgetTenths = picks.entry_history.value + picks.entry_history.bank;
   }
 
+  // `force` retained for API compatibility; synthesis is no longer required.
+  void force;
   const [beliefs, activeThesis] = await Promise.all([
     getActiveBeliefMap(user.id),
     getActiveThesis(user.id),
   ]);
-  if (activeThesis?.status === "collecting" && !force) {
-    return Response.json(
-      {
-        error:
-          "Active form thesis is still collecting beliefs. Synthesize it before generating a squad, or pass force=true to override.",
-      },
-      { status: 409 },
-    );
-  }
   const built = buildLegalSquad({
     bootstrap,
     fixtures,

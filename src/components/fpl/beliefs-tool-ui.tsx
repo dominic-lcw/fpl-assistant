@@ -497,7 +497,7 @@ function CreateThesisRender(
   const thesis = result.thesis;
   return (
     <ThesisCard
-      title={String(thesis?.title ?? "Form thesis")}
+      title={String(thesis?.title ?? "Belief tag")}
       status={String(thesis?.status ?? "collecting")}
       beliefCount={Number(thesis?.beliefCount ?? 0)}
       nextSteps={result.nextSteps}
@@ -527,7 +527,7 @@ function GetThesisRender(
     : [];
   return (
     <ThesisCard
-      title={String(thesis?.title ?? "Form thesis")}
+      title={String(thesis?.title ?? "Belief tag")}
       status={String(thesis?.status ?? "collecting")}
       summary={typeof thesis?.summary === "string" ? thesis.summary : null}
       beliefCount={Number(thesis?.beliefCount ?? beliefs.length)}
@@ -553,7 +553,7 @@ function ListThesesRender(
   const theses = result.theses ?? [];
   return (
     <div className="border-border/70 my-2 w-full rounded-xl border px-3 py-3">
-      <p className="text-sm font-medium">Form theses</p>
+      <p className="text-sm font-medium">Belief tags</p>
       <ul className="mt-2 divide-border/50 divide-y">
         {theses.map((t) => (
           <li key={String(t.id)} className="flex justify-between gap-2 py-1.5 text-xs">

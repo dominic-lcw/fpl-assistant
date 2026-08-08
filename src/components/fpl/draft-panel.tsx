@@ -188,21 +188,20 @@ function ThesisRailSection() {
       <div className="flex shrink-0 items-start justify-between gap-2 px-3 py-2.5">
         <div className="min-w-0">
           <p className="text-muted-foreground text-[0.7rem] font-semibold tracking-[0.12em] uppercase">
-            Thesis
+            Beliefs
           </p>
           <p className="truncate text-sm font-medium">
-            {activeThesis?.title ?? "No active thesis"}
+            {activeThesis
+              ? `${activeThesis.beliefCount} belief${activeThesis.beliefCount === 1 ? "" : "s"}`
+              : "No beliefs yet"}
           </p>
           {activeThesis ? (
-            <p className="text-muted-foreground mt-0.5 text-xs">
-              <span className="uppercase tracking-wide">{activeThesis.status}</span>
-              {" · "}
-              {activeThesis.beliefCount} belief
-              {activeThesis.beliefCount === 1 ? "" : "s"}
+            <p className="text-muted-foreground mt-0.5 truncate text-xs">
+              Tag: {activeThesis.title}
             </p>
           ) : (
             <p className="text-muted-foreground mt-0.5 text-xs">
-              Ask chat to create a form thesis, then add player beliefs.
+              Ask chat to upsert player beliefs; a tag is created automatically.
             </p>
           )}
         </div>
@@ -210,7 +209,7 @@ function ThesisRailSection() {
           type="button"
           variant="ghost"
           size="icon-xs"
-          aria-label="Refresh thesis"
+          aria-label="Refresh beliefs"
           onClick={() => void refreshActiveThesis()}
           disabled={loading}
         >
@@ -254,7 +253,7 @@ function ThesisRailSection() {
           </ul>
         ) : (
           <p className="text-muted-foreground/80 py-1 text-xs italic">
-            Beliefs will appear here as the thesis is built.
+            Beliefs will appear here as you add them.
           </p>
         )}
       </div>

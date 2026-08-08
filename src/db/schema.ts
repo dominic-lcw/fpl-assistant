@@ -176,8 +176,9 @@ export const squadDrafts = pgTable(
 );
 
 /**
- * Named per-user form thesis: a bag of player beliefs plus a synthesis
- * step before squad construction. Never shared across users.
+ * Lightweight per-user tag/bag for grouping player beliefs.
+ * Beliefs are the primary content; thesis title is just a label.
+ * Never shared across users.
  */
 export type FormThesisStatus =
   | "collecting"
@@ -198,13 +199,14 @@ export const formTheses = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    /** Display tag for the belief bag (not a first-class planning artifact). */
     title: text("title").notNull(),
     status: text("status", {
       enum: ["collecting", "synthesized", "applied", "archived"],
     })
       .notNull()
       .default("collecting"),
-    /** Agent synthesis paragraph written before squad build. */
+    /** Optional notes on the belief set; not required before squad build. */
     summary: text("summary"),
     preferences: jsonb("preferences").$type<FormThesisPreferences>(),
     gameweek: integer("gameweek"),
@@ -226,8 +228,8 @@ export const formTheses = pgTable(
 );
 
 /**
- * Per-user agent prior on a player's near-term form, belonging to a thesis.
- * Never shared across users — always scoped by userId + thesisId.
+ * Per-user agent prior on a player's near-term form (primary planning unit).
+ * Grouped under a thesis tag via thesisId. Never shared across users.
  */
 export type PlayerBeliefSources = string[];
 

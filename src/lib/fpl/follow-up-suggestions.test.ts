@@ -71,4 +71,14 @@ describe("buildFollowUpsFromMessages", () => {
     ]);
     expect(followUps[0]?.prompt).toMatch(/clarifying questions/i);
   });
+
+  it("keeps Reddit discussion separate from belief changes", () => {
+    const followUps = buildFollowUpsFromMessages([
+      assistantWithTools([{ toolName: "list_reddit_fpl_threads" }]),
+    ]);
+
+    expect(followUps.some((f) => /without changing my beliefs/i.test(f.prompt))).toBe(
+      true,
+    );
+  });
 });

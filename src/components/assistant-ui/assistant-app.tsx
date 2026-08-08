@@ -49,6 +49,7 @@ import {
   SynthesizeFormThesisToolUI,
   UpsertPlayerBeliefToolUI,
 } from "@/components/fpl/beliefs-tool-ui";
+import { ListRedditFplThreadsToolUI } from "@/components/fpl/community-tool-ui";
 import { ThesisProvider } from "@/components/fpl/thesis-context";
 import {
   ResizableHandle,
@@ -126,6 +127,7 @@ function AssistantRuntimeShell({ authSlot }: { authSlot?: ReactNode }) {
             <GetSquadDraftToolSync />
             <GetSuggestionsToolUI />
             <ComparePlayersToolUI />
+            <ListRedditFplThreadsToolUI />
             <CreateFormThesisToolUI />
             <ListFormThesesToolUI />
             <GetFormThesisToolUI />

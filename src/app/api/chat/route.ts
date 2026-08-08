@@ -11,6 +11,7 @@ import { and, eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { threads } from "@/db/schema";
+import { createCommunityTools } from "@/lib/community/tools";
 import { createFplTools } from "@/lib/fpl/tools";
 import { getApprovedUser } from "@/lib/access";
 import { managerIdSchema } from "@/lib/fpl/validation";
@@ -45,6 +46,7 @@ Form thesis tools (private per user — never shared):
 Interactive / web tools:
 - ask_user_choices → pause and ask a multiple-choice clarifying question in the UI. Wait for the user's tap.
 - $web_search → injuries, press, lineups, and other off-API FPL context
+- list_reddit_fpl_threads → recent posts from user-selected FPL subreddits; community evidence only
 
 Squad rules (always enforce via suggest_squad, never invent illegal squads):
 - Exactly 15 players: 2 GKP, 5 DEF, 5 MID, 3 FWD
@@ -63,6 +65,9 @@ Belief rules:
 - expectedPoints is calculated (not invented): baseline EP × belief adjustments over horizonGw. Prefer compute_player_expectation; upsert also auto-fills expectedPoints plus ceiling/floor bands.
 - Never invent beliefs without tool evidence. Clear beliefs when status flips or the prior no longer holds.
 - Present beliefs as priors that adjust scores, not as facts. The UI shows each belief as a card with quantified xPts.
+- Reddit posts are unverified community discussion, not a recommendation input. When asked for community content, call list_reddit_fpl_threads using the subreddits the user named (ask if unknown), then distinguish observations, disagreement, and uncertainty.
+- Do not create or update a player belief merely because Reddit discussion was listed or summarized. First present the community evidence and wait for the user to explicitly ask to promote a specific player observation into a belief.
+- If the user explicitly promotes community evidence into a belief, use its direct Reddit URLs in sources, set confidence no higher than 0.35 and horizonGw to 1 unless independent official evidence supports a higher value, and say it is community-derived.
 
 Advice workflow (captain/transfers):
 1. Clarify unknowns with ask_user_choices when preference would change the pick.
@@ -141,6 +146,7 @@ export async function POST(req: Request) {
     tools: {
       ...frontendTools(frontendToolDefs as never),
       ...fplTools,
+      ...createCommunityTools(),
       ...createKimiBuiltinWebSearchTool(),
     },
   });

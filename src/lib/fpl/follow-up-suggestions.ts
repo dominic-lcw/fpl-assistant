@@ -122,6 +122,15 @@ export function buildFollowUpsFromMessages(
       prompts.push("Cross-check those news findings against FPL availability fields");
       prompts.push("Update captain/transfer advice with this news");
     }
+
+    if (call.toolName === "list_reddit_fpl_threads") {
+      prompts.push(
+        "Summarize the recurring claims and disagreements, without changing my beliefs",
+      );
+      prompts.push(
+        "Compare one Reddit claim with official FPL data and injury news",
+      );
+    }
   }
 
   if (prompts.length === 0) {

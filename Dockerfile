@@ -13,6 +13,18 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm build
+# Belt-and-suspenders: `duckdb.node` dlopens sibling `libduckdb.so` via
+# $ORIGIN. Next tracing can miss the .so; copy any still-missing ones in.
+RUN set -eux; \
+  find /app/node_modules -name 'libduckdb.so' -print0 \
+  | while IFS= read -r -d '' so; do \
+      rel="${so#/app/}"; \
+      dest="/app/.next/standalone/${rel}"; \
+      if [ ! -f "$dest" ]; then \
+        mkdir -p "$(dirname "$dest")"; \
+        cp "$so" "$dest"; \
+      fi; \
+    done
 
 FROM node:20-alpine AS runner
 WORKDIR /app

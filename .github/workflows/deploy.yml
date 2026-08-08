@@ -7,14 +7,14 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-cloud-run
+  group: deploy-azure-container-apps
   cancel-in-progress: false
 
 env:
-  PROJECT_ID: openclaw-dominic-209
-  REGION: asia-southeast1
-  SERVICE: fpl-assistant
-  REPO: fpl-assistant
+  RESOURCE_GROUP: rg-fpl-assistant
+  APP_NAME: fpl-assistant
+  ACR_NAME: fplassistantacr
+  IMAGE_NAME: fpl-assistant
 
 permissions:
   contents: read
@@ -57,28 +57,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Authenticate to Google Cloud
-        id: auth
-        uses: google-github-actions/auth@v3
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
         with:
-          project_id: ${{ env.PROJECT_ID }}
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v3
-
-      - name: Configure Artifact Registry auth
-        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Set image tags
         id: image
         run: |
-          IMAGE_BASE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${SERVICE}"
-          SHA_TAG="${IMAGE_BASE}:${GITHUB_SHA}"
-          LATEST_TAG="${IMAGE_BASE}:latest"
-          echo "sha=${SHA_TAG}" >> "$GITHUB_OUTPUT"
-          echo "latest=${LATEST_TAG}" >> "$GITHUB_OUTPUT"
+          LOGIN_SERVER=$(az acr show --name "$ACR_NAME" --resource-group "$RESOURCE_GROUP" --query loginServer -o tsv)
+          echo "sha=${LOGIN_SERVER}/${IMAGE_NAME}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "latest=${LOGIN_SERVER}/${IMAGE_NAME}:latest" >> "$GITHUB_OUTPUT"
+          echo "login_server=${LOGIN_SERVER}" >> "$GITHUB_OUTPUT"
+
+      - name: ACR login
+        run: az acr login --name "$ACR_NAME"
 
       - name: Build container image
         run: |
@@ -93,14 +88,18 @@ jobs:
           docker push "${{ steps.image.outputs.sha }}"
           docker push "${{ steps.image.outputs.latest }}"
 
-      - name: Deploy to Cloud Run
-        id: deploy
-        uses: google-github-actions/deploy-cloudrun@v3
-        with:
-          service: ${{ env.SERVICE }}
-          region: ${{ env.REGION }}
-          image: ${{ steps.image.outputs.sha }}
+      - name: Deploy to Container Apps
+        run: |
+          az containerapp update \
+            --name "$APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --image "${{ steps.image.outputs.sha }}" \
+            --output none
 
       - name: Smoke check
         run: |
-          curl -fsS -o /dev/null -w "%{http_code}\n" "${{ steps.deploy.outputs.url }}/signin" | grep -E '^(200|302)$'
+          FQDN=$(az containerapp show \
+            --name "$APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          curl -fsS -o /dev/null -w "%{http_code}\n" "https://${FQDN}/signin" | grep -E '^(200|302)$'

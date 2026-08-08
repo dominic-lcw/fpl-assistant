@@ -102,3 +102,37 @@ export function thesisFromToolResult(result: unknown): ActiveThesisView | null {
     beliefs,
   };
 }
+
+export const EMPTY_BELIEFS_CONTEXT =
+  "No player beliefs saved yet. Collect evidence, quantify with compute_player_expectation, upsert_player_belief for contested players, then suggest_squad. Speak in player beliefs and squad drafts only — do not invent a named planning narrative for the user.";
+
+/**
+ * Assistant context for the active belief set.
+ * Empty groups (legacy thesis shells with only a title/summary) are treated as
+ * no beliefs so the model does not narrate a "thesis" ceremony.
+ */
+export function formatBeliefAssistantContext(
+  thesis: ActiveThesisView | null,
+): string {
+  if (!thesis || thesis.beliefCount <= 0 || thesis.beliefs.length === 0) {
+    return EMPTY_BELIEFS_CONTEXT;
+  }
+
+  const lines = [
+    `Active player beliefs: ${thesis.beliefCount}`,
+    `Belief group id: ${thesis.id}`,
+    thesis.gameweek != null ? `Gameweek: ${thesis.gameweek}` : null,
+    "Do not call this a thesis to the user — speak in player beliefs and squad drafts.",
+    "Player beliefs:",
+  ];
+  for (const b of thesis.beliefs.slice(0, 20)) {
+    const name = b.name ?? `#${b.elementId}`;
+    lines.push(
+      `- ${name} (${b.team ?? "?"} ${b.position ?? ""}): formBelief ${b.formBelief >= 0 ? "+" : ""}${b.formBelief.toFixed(1)}, minutesRisk ${b.minutesRisk.toFixed(2)}, confidence ${b.confidence.toFixed(2)}, expectedPoints ${b.expectedPoints != null ? b.expectedPoints.toFixed(1) : "n/a"}/${b.horizonGw}gw, delta ${b.beliefDelta >= 0 ? "+" : ""}${b.beliefDelta.toFixed(2)} — ${b.rationale}`,
+    );
+  }
+  lines.push(
+    "Upsert more beliefs as needed, then call suggest_squad (save=true when the user wants it kept).",
+  );
+  return lines.filter(Boolean).join("\n");
+}

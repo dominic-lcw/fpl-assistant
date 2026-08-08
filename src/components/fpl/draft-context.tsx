@@ -33,6 +33,7 @@ type DraftContextValue = {
   setActiveDraft: (draft: DraftSummary | null) => void;
   applySuggestResult: (result: unknown) => void;
   loadDraft: (draftId: string) => Promise<void>;
+  deleteDraft: (draftId: string) => Promise<void>;
   refreshDrafts: () => Promise<void>;
   removeDraft: (draftId: string) => void;
   startNewDraft: () => void;
@@ -239,6 +240,30 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const deleteDraft = useCallback(
+    async (draftId: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/drafts/${draftId}`, { method: "DELETE" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(
+            typeof data.error === "string"
+              ? data.error
+              : "Failed to delete draft",
+          );
+        }
+        removeDraft(draftId);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to delete draft");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [removeDraft],
+  );
+
   const clearWantsNewDraft = useCallback(() => {
     setWantsNewDraft(false);
   }, []);
@@ -272,6 +297,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       setActiveDraft,
       applySuggestResult,
       loadDraft,
+      deleteDraft,
       refreshDrafts,
       removeDraft,
       startNewDraft,
@@ -286,6 +312,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       setActiveDraft,
       applySuggestResult,
       loadDraft,
+      deleteDraft,
       refreshDrafts,
       removeDraft,
       startNewDraft,

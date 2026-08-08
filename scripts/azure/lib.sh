@@ -45,7 +45,7 @@ load_azure_defaults() {
   export RESOURCE_GROUP="${RESOURCE_GROUP:-rg-fpl-assistant}"
   export LOCATION="${LOCATION:-southeastasia}"
   export APP_NAME="${APP_NAME:-fpl-assistant}"
-  export ACR_NAME="${ACR_NAME:-openclawacr}"
+  export ACR_NAME="${ACR_NAME:-dominicacr}"
   export ACA_ENV="${ACA_ENV:-fpl-assistant-env}"
   export DB_SERVER="${DB_SERVER:-fpl-assistant-pg}"
   export DB_NAME="${DB_NAME:-fpl_assistant}"

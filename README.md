@@ -115,7 +115,7 @@ az login
 az account set --subscription '<your-new-subscription>'
 
 export LOCATION=southeastasia
-export ACR_NAME=openclawacr              # shared registry; globally unique
+export ACR_NAME=dominicacr              # shared registry; globally unique
 export KEY_VAULT=kv-fpl-assistant        # globally unique
 export DB_PASSWORD='CHOOSE_A_STRONG_PASSWORD'
 

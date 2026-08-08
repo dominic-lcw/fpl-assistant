@@ -15,7 +15,8 @@ export interface FplTeam {
   id: number;
   name: string;
   short_name: string;
-  strength: number;
+  /** Overall strength; null in preseason before FPL publishes ratings. */
+  strength: number | null;
   strength_attack_home: number;
   strength_attack_away: number;
   strength_defence_home: number;

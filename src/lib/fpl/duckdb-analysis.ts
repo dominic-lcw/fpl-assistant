@@ -25,7 +25,7 @@ export const FPL_ANALYSIS_TABLES = {
   players:
     "One row per FPL player. Includes id, web_name, team_id, team, team_short, position, cost (GBP), form, points_per_game, total_points, minutes, goals_scored, assists, clean_sheets, expected_goals, expected_assists, expected_goal_involvements, selected_by_percent, status, chance_of_playing_next_round, and ep_next.",
   teams:
-    "One row per Premier League team. Includes id, name, short_name, strength, and home/away attack and defence strengths.",
+    "One row per Premier League team. Includes id, name, short_name, strength (null in preseason), and home/away attack and defence strengths.",
   fixtures:
     "One row per fixture. Includes event, home_team_id, home_team, away_team_id, away_team, home_difficulty, away_difficulty, kickoff_time, finished, and scores. Difficulty is 1 (easiest) to 5 (hardest).",
   player_beliefs:
@@ -47,7 +47,7 @@ function appendNullableInteger(
   },
   value: number | null | undefined,
 ) {
-  if (value == null) appender.appendNull();
+  if (value == null || !Number.isFinite(value)) appender.appendNull();
   else appender.appendInteger(value);
 }
 
@@ -60,6 +60,26 @@ function appendNullableDouble(
 ) {
   if (value == null || !Number.isFinite(value)) appender.appendNull();
   else appender.appendDouble(value);
+}
+
+function appendVarchar(
+  appender: {
+    appendVarchar(value: string): void;
+    appendNull(): void;
+  },
+  value: string | null | undefined,
+) {
+  if (value == null) appender.appendNull();
+  else appender.appendVarchar(value);
+}
+
+/** Parse FPL string/number fields; non-finite → null for DuckDB. */
+function toFiniteNumber(
+  value: string | number | null | undefined,
+): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
 /**
@@ -114,32 +134,47 @@ export async function runFplAnalysis({
         (type) => type.id === player.element_type,
       );
       playerAppender.appendInteger(player.id);
-      playerAppender.appendVarchar(player.web_name);
-      playerAppender.appendVarchar(player.first_name);
-      playerAppender.appendVarchar(player.second_name);
+      appendVarchar(playerAppender, player.web_name);
+      appendVarchar(playerAppender, player.first_name);
+      appendVarchar(playerAppender, player.second_name);
       playerAppender.appendInteger(player.team);
-      playerAppender.appendVarchar(team?.name ?? String(player.team));
-      playerAppender.appendVarchar(team?.short_name ?? String(player.team));
+      appendVarchar(playerAppender, team?.name ?? String(player.team));
+      appendVarchar(playerAppender, team?.short_name ?? String(player.team));
       playerAppender.appendInteger(player.element_type);
-      playerAppender.appendVarchar(position?.singular_name_short ?? "UNK");
-      playerAppender.appendDouble(player.now_cost / 10);
-      playerAppender.appendDouble(Number(player.form));
-      playerAppender.appendDouble(Number(player.points_per_game));
-      playerAppender.appendInteger(player.total_points);
-      playerAppender.appendInteger(player.minutes);
-      playerAppender.appendInteger(player.goals_scored);
-      playerAppender.appendInteger(player.assists);
-      playerAppender.appendInteger(player.clean_sheets);
-      playerAppender.appendDouble(Number(player.expected_goals));
-      playerAppender.appendDouble(Number(player.expected_assists));
-      playerAppender.appendDouble(Number(player.expected_goal_involvements));
-      playerAppender.appendDouble(Number(player.selected_by_percent));
-      playerAppender.appendVarchar(player.status);
+      appendVarchar(playerAppender, position?.singular_name_short ?? "UNK");
+      appendNullableDouble(playerAppender, player.now_cost / 10);
+      appendNullableDouble(playerAppender, toFiniteNumber(player.form));
+      appendNullableDouble(
+        playerAppender,
+        toFiniteNumber(player.points_per_game),
+      );
+      appendNullableInteger(playerAppender, player.total_points);
+      appendNullableInteger(playerAppender, player.minutes);
+      appendNullableInteger(playerAppender, player.goals_scored);
+      appendNullableInteger(playerAppender, player.assists);
+      appendNullableInteger(playerAppender, player.clean_sheets);
+      appendNullableDouble(
+        playerAppender,
+        toFiniteNumber(player.expected_goals),
+      );
+      appendNullableDouble(
+        playerAppender,
+        toFiniteNumber(player.expected_assists),
+      );
+      appendNullableDouble(
+        playerAppender,
+        toFiniteNumber(player.expected_goal_involvements),
+      );
+      appendNullableDouble(
+        playerAppender,
+        toFiniteNumber(player.selected_by_percent),
+      );
+      appendVarchar(playerAppender, player.status);
       appendNullableInteger(
         playerAppender,
         player.chance_of_playing_next_round,
       );
-      appendNullableDouble(playerAppender, Number(player.ep_next));
+      appendNullableDouble(playerAppender, toFiniteNumber(player.ep_next));
       playerAppender.endRow();
     }
     playerAppender.closeSync();
@@ -147,13 +182,14 @@ export async function runFplAnalysis({
     const teamAppender = await connection.createAppender("teams");
     for (const team of bootstrap.teams) {
       teamAppender.appendInteger(team.id);
-      teamAppender.appendVarchar(team.name);
-      teamAppender.appendVarchar(team.short_name);
-      teamAppender.appendInteger(team.strength);
-      teamAppender.appendInteger(team.strength_attack_home);
-      teamAppender.appendInteger(team.strength_attack_away);
-      teamAppender.appendInteger(team.strength_defence_home);
-      teamAppender.appendInteger(team.strength_defence_away);
+      appendVarchar(teamAppender, team.name);
+      appendVarchar(teamAppender, team.short_name);
+      // FPL leaves overall strength null in preseason.
+      appendNullableInteger(teamAppender, team.strength);
+      appendNullableInteger(teamAppender, team.strength_attack_home);
+      appendNullableInteger(teamAppender, team.strength_attack_away);
+      appendNullableInteger(teamAppender, team.strength_defence_home);
+      appendNullableInteger(teamAppender, team.strength_defence_away);
       teamAppender.endRow();
     }
     teamAppender.closeSync();
@@ -163,19 +199,20 @@ export async function runFplAnalysis({
       fixtureAppender.appendInteger(fixture.id);
       appendNullableInteger(fixtureAppender, fixture.event);
       fixtureAppender.appendInteger(fixture.team_h);
-      fixtureAppender.appendVarchar(
+      appendVarchar(
+        fixtureAppender,
         teams.get(fixture.team_h)?.short_name ?? String(fixture.team_h),
       );
       fixtureAppender.appendInteger(fixture.team_a);
-      fixtureAppender.appendVarchar(
+      appendVarchar(
+        fixtureAppender,
         teams.get(fixture.team_a)?.short_name ?? String(fixture.team_a),
       );
-      fixtureAppender.appendInteger(fixture.team_h_difficulty);
-      fixtureAppender.appendInteger(fixture.team_a_difficulty);
-      if (fixture.kickoff_time == null) fixtureAppender.appendNull();
-      else fixtureAppender.appendVarchar(fixture.kickoff_time);
-      fixtureAppender.appendBoolean(fixture.finished);
-      fixtureAppender.appendBoolean(fixture.started);
+      appendNullableInteger(fixtureAppender, fixture.team_h_difficulty);
+      appendNullableInteger(fixtureAppender, fixture.team_a_difficulty);
+      appendVarchar(fixtureAppender, fixture.kickoff_time);
+      fixtureAppender.appendBoolean(Boolean(fixture.finished));
+      fixtureAppender.appendBoolean(Boolean(fixture.started));
       appendNullableInteger(fixtureAppender, fixture.team_h_score);
       appendNullableInteger(fixtureAppender, fixture.team_a_score);
       fixtureAppender.endRow();
@@ -185,10 +222,13 @@ export async function runFplAnalysis({
     const beliefAppender = await connection.createAppender("player_beliefs");
     for (const [playerId, belief] of beliefs ?? []) {
       beliefAppender.appendInteger(playerId);
-      beliefAppender.appendDouble(belief.formBelief);
-      beliefAppender.appendDouble(belief.minutesRisk);
-      beliefAppender.appendDouble(belief.confidence);
-      beliefAppender.appendDouble(computeBeliefScoreDelta(belief));
+      appendNullableDouble(beliefAppender, toFiniteNumber(belief.formBelief));
+      appendNullableDouble(beliefAppender, toFiniteNumber(belief.minutesRisk));
+      appendNullableDouble(beliefAppender, toFiniteNumber(belief.confidence));
+      appendNullableDouble(
+        beliefAppender,
+        toFiniteNumber(computeBeliefScoreDelta(belief)),
+      );
       beliefAppender.endRow();
     }
     beliefAppender.closeSync();

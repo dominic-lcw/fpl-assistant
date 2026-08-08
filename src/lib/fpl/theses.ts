@@ -151,6 +151,32 @@ export async function createFormThesis(params: {
   return row;
 }
 
+const DEFAULT_THESIS_TAG = "Active beliefs";
+
+/**
+ * Beliefs are first-class; a thesis is only a tag/bag for the active set.
+ * Ensures one working tag exists so upsert can proceed without a create step.
+ */
+export async function ensureActiveThesisTag(params: {
+  userId: string;
+  title?: string;
+  gameweek?: number | null;
+  horizonGw?: number;
+}) {
+  const existing = await getActiveThesis(params.userId);
+  if (existing) return { thesis: existing, created: false as const };
+
+  const title = (params.title?.trim() || DEFAULT_THESIS_TAG).slice(0, 120);
+  const thesis = await createFormThesis({
+    userId: params.userId,
+    title: title.length >= 3 ? title : DEFAULT_THESIS_TAG,
+    gameweek: params.gameweek,
+    horizonGw: params.horizonGw,
+    archiveOthers: true,
+  });
+  return { thesis, created: true as const };
+}
+
 export async function synthesizeFormThesis(params: {
   userId: string;
   thesisId: string;

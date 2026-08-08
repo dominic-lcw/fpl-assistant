@@ -91,7 +91,7 @@ export function buildFollowUpsFromMessages(
       call.toolName === "list_player_beliefs" ||
       call.toolName === "compute_player_expectation"
     ) {
-      prompts.push("Synthesize this form thesis, then build a squad from it");
+      prompts.push("Build a £100m squad from these beliefs and save it");
       prompts.push("Add another belief for a contested midfielder or forward");
     }
 
@@ -99,12 +99,12 @@ export function buildFollowUpsFromMessages(
       prompts.push(
         "Compute expected points for 3 contested players, then upsert beliefs",
       );
-      prompts.push("Ask me about risk appetite before synthesizing");
+      prompts.push("Ask me about risk appetite before building a squad");
     }
 
     if (call.toolName === "synthesize_form_thesis") {
-      prompts.push("Build a £100m squad from this synthesized thesis and save it");
-      prompts.push("Show captain and transfer suggestions using these thesis beliefs");
+      prompts.push("Build a £100m squad from these beliefs and save it");
+      prompts.push("Show captain and transfer suggestions using these beliefs");
     }
 
     if (call.toolName === "suggest_squad" || call.toolName === "get_squad_draft") {

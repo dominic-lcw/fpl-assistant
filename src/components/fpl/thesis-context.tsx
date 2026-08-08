@@ -44,13 +44,12 @@ export function useThesisContext() {
 
 function formatThesisContext(thesis: ActiveThesisView) {
   const lines = [
-    `Active form thesis: ${thesis.title}`,
-    `Thesis ID: ${thesis.id}`,
-    `Status: ${thesis.status}`,
+    `Active belief tag: ${thesis.title}`,
+    `Tag ID: ${thesis.id}`,
     thesis.gameweek != null ? `Gameweek: ${thesis.gameweek}` : null,
     `Beliefs: ${thesis.beliefCount}`,
-    thesis.summary ? `Synthesis: ${thesis.summary}` : null,
-    "Player beliefs:",
+    thesis.summary ? `Notes: ${thesis.summary}` : null,
+    "Player beliefs (primary):",
   ];
   for (const b of thesis.beliefs.slice(0, 20)) {
     const name = b.name ?? `#${b.elementId}`;
@@ -58,15 +57,9 @@ function formatThesisContext(thesis: ActiveThesisView) {
       `- ${name} (${b.team ?? "?"} ${b.position ?? ""}): formBelief ${b.formBelief >= 0 ? "+" : ""}${b.formBelief.toFixed(1)}, minutesRisk ${b.minutesRisk.toFixed(2)}, confidence ${b.confidence.toFixed(2)}, expectedPoints ${b.expectedPoints != null ? b.expectedPoints.toFixed(1) : "n/a"}/${b.horizonGw}gw, delta ${b.beliefDelta >= 0 ? "+" : ""}${b.beliefDelta.toFixed(2)} — ${b.rationale}`,
     );
   }
-  if (thesis.status === "collecting") {
-    lines.push(
-      "Thesis is collecting. Upsert more beliefs as needed, then call synthesize_form_thesis before suggest_squad.",
-    );
-  } else if (thesis.status === "synthesized") {
-    lines.push(
-      "Thesis is synthesized. Call suggest_squad (save=true when the user wants it kept) to build the final team.",
-    );
-  }
+  lines.push(
+    "Upsert more beliefs as needed, then call suggest_squad (save=true when the user wants it kept). Thesis tags/notes are optional.",
+  );
   return lines.filter(Boolean).join("\n");
 }
 
@@ -171,7 +164,7 @@ export function ThesisProvider({ children }: { children: ReactNode }) {
       if (!prev || prev.id !== belief.thesisId) {
         return {
           id: belief.thesisId,
-          title: "Form thesis",
+          title: "Active beliefs",
           status: "collecting",
           summary: null,
           gameweek: null,
@@ -238,7 +231,7 @@ export function ThesisProvider({ children }: { children: ReactNode }) {
   useAssistantContext({
     getContext: () => {
       if (!activeThesis) {
-        return "No active form thesis. Create one with create_form_thesis before storing player beliefs, then synthesize_form_thesis before suggest_squad.";
+        return "No active beliefs yet. Upsert player beliefs with upsert_player_belief (a thesis tag is created automatically). Then suggest_squad when ready.";
       }
       return formatThesisContext(activeThesis);
     },
@@ -247,8 +240,8 @@ export function ThesisProvider({ children }: { children: ReactNode }) {
 
   useAssistantInstructions(
     activeThesis
-      ? "When discussing form or squad construction, prefer the Active form thesis in context. Quantify with compute_player_expectation, collect beliefs with upsert_player_belief, synthesize with synthesize_form_thesis, then suggest_squad."
-      : "No active form thesis. Create one with create_form_thesis before storing player beliefs.",
+      ? "When discussing form or squad construction, prefer the active player beliefs in context. Quantify with compute_player_expectation, collect beliefs with upsert_player_belief, then suggest_squad. Thesis tags/notes are optional labels only."
+      : "No active beliefs yet. Upsert player beliefs directly with upsert_player_belief; do not require create_form_thesis or synthesize_form_thesis.",
   );
 
   const value = useMemo<ThesisContextValue>(

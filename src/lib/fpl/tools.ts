@@ -50,6 +50,7 @@ import { runFplAnalysis } from "./duckdb-analysis";
 import {
   archiveFormThesis,
   createFormThesis,
+  ensureActiveThesisTag,
   getActiveBeliefMap,
   getActiveThesis,
   getThesisWithBeliefs,
@@ -659,7 +660,7 @@ export function createFplTools(options?: {
 
     suggest_squad: tool({
       description:
-        "Build a legal 15-player FPL squad (2 GKP, 5 DEF, 5 MID, 3 FWD, max 3 per club) using form, xGI, fixture difficulty, and beliefs from the signed-in user's active form thesis. Prefer synthesize_form_thesis first. Modes: draft_100 (£100.0m blank slate) or wildcard (manager team value + bank). Optionally persist the draft.",
+        "Build a legal 15-player FPL squad (2 GKP, 5 DEF, 5 MID, 3 FWD, max 3 per club) using form, xGI, fixture difficulty, and the signed-in user's active player beliefs. Modes: draft_100 (£100.0m blank slate) or wildcard (manager team value + bank). Optionally persist the draft.",
       inputSchema: z.object({
         mode: z
           .enum(["draft_100", "wildcard"])
@@ -683,11 +684,9 @@ export function createFplTools(options?: {
         force: z
           .boolean()
           .optional()
-          .describe(
-            "If true, build even when the active thesis is still collecting (skips synthesis gate).",
-          ),
+          .describe("Deprecated no-op; kept for compatibility. Squad build no longer requires thesis synthesis."),
       }),
-      execute: async ({ mode, managerId, gameweek, save, title, force }) =>
+      execute: async ({ mode, managerId, gameweek, save, title }) =>
         runFplTool(async () => {
           const [bootstrap, fixtures] = await Promise.all([
             getBootstrapStatic(),
@@ -725,26 +724,6 @@ export function createFplTools(options?: {
 
           const beliefs = userId ? await getActiveBeliefMap(userId) : undefined;
           const activeThesis = userId ? await getActiveThesis(userId) : null;
-          if (
-            activeThesis &&
-            activeThesis.status === "collecting" &&
-            !force
-          ) {
-            const packed = await getThesisWithBeliefs(
-              userId!,
-              activeThesis.id,
-            );
-            return {
-              error:
-                "Active form thesis is still collecting beliefs. Call synthesize_form_thesis with a summary first, then suggest_squad. Pass force=true only if the user insists on building before synthesis.",
-              thesis: packed?.thesis ?? serializeThesis(activeThesis),
-              nextSteps: [
-                "Review beliefs with list_player_beliefs / get_form_thesis",
-                "Call synthesize_form_thesis with a clear summary of the thesis",
-                "Then call suggest_squad again",
-              ],
-            };
-          }
 
           const built = buildLegalSquad({
             bootstrap,
@@ -982,14 +961,22 @@ export function createFplTools(options?: {
 
     upsert_player_belief: tool({
       description:
-        "Add or update one player belief inside a form thesis (defaults to the active thesis). Automatically quantifies expectedPoints from FPL baseline + priors (and fills ceiling/floor bands when omitted). Never invent beliefs without API or web evidence.",
+        "Add or update one player belief (the primary planning unit). Auto-attaches to the active thesis tag, creating a default tag if needed. Automatically quantifies expectedPoints from FPL baseline + priors (and fills ceiling/floor bands when omitted). Never invent beliefs without API or web evidence.",
       inputSchema: z.object({
         playerId: playerIdSchema,
         thesisId: z
           .string()
           .min(1)
           .optional()
-          .describe("Defaults to the active working thesis."),
+          .describe("Optional thesis tag id. Defaults to the active tag (auto-created if missing)."),
+        tag: z
+          .string()
+          .min(3)
+          .max(120)
+          .optional()
+          .describe(
+            "Optional label used only when auto-creating a thesis tag (e.g. \"GW4 differentials\").",
+          ),
         formBelief: z
           .number()
           .min(-MAX_ABS_FORM_BELIEF)
@@ -1050,6 +1037,7 @@ export function createFplTools(options?: {
       execute: async ({
         playerId,
         thesisId,
+        tag,
         formBelief,
         minutesRisk,
         confidence,
@@ -1066,17 +1054,24 @@ export function createFplTools(options?: {
               error: "No signed-in user available for private belief storage.",
             };
           }
-          const thesis = thesisId
+          let thesis = thesisId
             ? await getUserThesis(userId, thesisId)
-            : await getActiveThesis(userId);
+            : null;
+          let tagCreated = false;
           if (!thesis) {
-            return {
-              error:
-                "No active form thesis. Call create_form_thesis first, then upsert beliefs into it.",
-            };
+            if (thesisId) {
+              return { error: `Thesis tag ${thesisId} was not found.` };
+            }
+            const ensured = await ensureActiveThesisTag({
+              userId,
+              title: tag,
+              horizonGw,
+            });
+            thesis = ensured.thesis;
+            tagCreated = ensured.created;
           }
           if (thesis.status === "archived") {
-            return { error: "Cannot add beliefs to an archived thesis." };
+            return { error: "Cannot add beliefs to an archived thesis tag." };
           }
           const bootstrap = await getBootstrapStatic();
           const element = bootstrap.elements.find((e) => e.id === playerId);
@@ -1112,6 +1107,7 @@ export function createFplTools(options?: {
             rationale,
             sources,
           });
+          const refreshed = await getUserThesis(userId, thesis.id);
           const belief = {
             ...serializeBelief(row),
             name: element.web_name,
@@ -1121,7 +1117,9 @@ export function createFplTools(options?: {
             )?.singular_name_short,
           };
           return {
-            thesis: serializeThesis(thesis, { beliefCount: undefined }),
+            thesis: serializeThesis(refreshed ?? thesis, {
+              beliefCount: undefined,
+            }),
             player: {
               id: element.id,
               name: element.web_name,
@@ -1132,14 +1130,16 @@ export function createFplTools(options?: {
             },
             belief,
             expectation,
-            note: "Belief stored with quantified expectedPoints. Thesis status returns to collecting until synthesize_form_thesis.",
+            note: tagCreated
+              ? "Belief stored with quantified expectedPoints. Created a default thesis tag to group active beliefs."
+              : "Belief stored with quantified expectedPoints under the active thesis tag.",
           };
         }),
     }),
 
     list_player_beliefs: tool({
       description:
-        "List player beliefs for a form thesis (defaults to the active thesis). Each belief is shown as a structured card in the UI.",
+        "List active player beliefs (defaults to the active thesis tag). Each belief is shown as a structured card in the UI.",
       inputSchema: z.object({
         thesisId: z.string().min(1).optional(),
         limit: z.number().int().min(1).max(100).optional(),
@@ -1156,8 +1156,8 @@ export function createFplTools(options?: {
             : await getActiveThesis(userId);
           if (!thesis) {
             return {
-              error: "No active form thesis. Call create_form_thesis first.",
               beliefs: [],
+              note: "No active beliefs yet. Upsert player beliefs directly; a thesis tag is created automatically.",
             };
           }
           const [rows, bootstrap] = await Promise.all([
@@ -1190,7 +1190,7 @@ export function createFplTools(options?: {
 
     get_player_belief: tool({
       description:
-        "Fetch one player belief from a form thesis (defaults to active), including the score delta applied in construction.",
+        "Fetch one player belief from the active set (defaults to active thesis tag), including the score delta applied in construction.",
       inputSchema: z.object({
         playerId: playerIdSchema,
         thesisId: z.string().min(1).optional(),
@@ -1209,7 +1209,7 @@ export function createFplTools(options?: {
             return {
               playerId,
               belief: null,
-              note: "No active form thesis.",
+              note: "No active beliefs yet.",
             };
           }
           const row = await getBeliefForThesis(userId, thesis.id, playerId);
@@ -1218,7 +1218,7 @@ export function createFplTools(options?: {
               thesisId: thesis.id,
               playerId,
               belief: null,
-              note: "No belief for this player on the thesis.",
+              note: "No belief for this player in the active set.",
             };
           }
           const bootstrap = await getBootstrapStatic();
@@ -1253,7 +1253,7 @@ export function createFplTools(options?: {
 
     clear_player_belief: tool({
       description:
-        "Delete one player belief from a form thesis (defaults to the active thesis).",
+        "Delete one player belief from the active set (defaults to the active thesis tag).",
       inputSchema: z.object({
         playerId: playerIdSchema,
         thesisId: z.string().min(1).optional(),
@@ -1269,7 +1269,7 @@ export function createFplTools(options?: {
             ? await getUserThesis(userId, thesisId)
             : await getActiveThesis(userId);
           if (!thesis) {
-            return { error: "No active form thesis." };
+            return { error: "No active beliefs to clear." };
           }
           const deleted = await clearUserPlayerBelief(
             userId,
@@ -1285,7 +1285,7 @@ export function createFplTools(options?: {
 
     create_form_thesis: tool({
       description:
-        "Create a named form thesis for the signed-in user. A thesis collects player beliefs; after synthesize_form_thesis, call suggest_squad to build the team. Archives other collecting/synthesized theses by default.",
+        "Optional: create/rename a thesis tag that groups player beliefs. Beliefs are primary — prefer upsert_player_belief (auto-creates a default tag). Use this only when the user wants a named bag. Archives other collecting/synthesized tags by default.",
       inputSchema: z.object({
         title: z.string().min(3).max(120),
         gameweek: gameweekIdSchema.optional(),
@@ -1310,14 +1310,15 @@ export function createFplTools(options?: {
               "Quantify with compute_player_expectation (FPL baseline + priors)",
               "Upsert player beliefs with evidence (upsert_player_belief)",
               "Optionally ask_user_choices for risk / differential preference",
-              "Call synthesize_form_thesis, then suggest_squad",
+              "Call suggest_squad when ready (save=true to persist)",
             ],
           };
         }),
     }),
 
     list_form_theses: tool({
-      description: "List the signed-in user's form theses (most recent first).",
+      description:
+        "List the signed-in user's thesis tags (belief bags), most recent first.",
       inputSchema: z.object({
         limit: z.number().int().min(1).max(50).optional(),
       }),
@@ -1335,13 +1336,13 @@ export function createFplTools(options?: {
 
     get_form_thesis: tool({
       description:
-        "Load one form thesis with all of its player beliefs for display and synthesis.",
+        "Load one thesis tag with all of its player beliefs for display.",
       inputSchema: z.object({
         thesisId: z
           .string()
           .min(1)
           .optional()
-          .describe("Defaults to the active working thesis."),
+          .describe("Defaults to the active working thesis tag."),
       }),
       execute: async ({ thesisId }) =>
         runFplTool(async () => {
@@ -1350,11 +1351,14 @@ export function createFplTools(options?: {
           }
           const id = thesisId ?? (await getActiveThesis(userId))?.id;
           if (!id) {
-            return { error: "No active form thesis.", thesis: null };
+            return {
+              thesis: null,
+              note: "No active thesis tag. Upsert beliefs to create one automatically.",
+            };
           }
           const packed = await getThesisWithBeliefs(userId, id);
           if (!packed) {
-            return { error: `Thesis ${id} was not found.` };
+            return { error: `Thesis tag ${id} was not found.` };
           }
           const bootstrap = await getBootstrapStatic();
           const byId = new Map(bootstrap.elements.map((e) => [e.id, e]));
@@ -1381,7 +1385,7 @@ export function createFplTools(options?: {
 
     synthesize_form_thesis: tool({
       description:
-        "Write the synthesis for a form thesis (summary of beliefs + strategy) and mark it synthesized so suggest_squad can build the final team.",
+        "Optional: attach a short summary/notes to the active thesis tag. Not required before suggest_squad — beliefs alone are enough.",
       inputSchema: z.object({
         thesisId: z.string().min(1).optional(),
         summary: z
@@ -1389,7 +1393,7 @@ export function createFplTools(options?: {
           .min(40)
           .max(2000)
           .describe(
-            "Synthesis paragraph: key beliefs, risks, and how the squad should be built.",
+            "Optional notes: key beliefs, risks, and how the squad should be built.",
           ),
         risk: z.enum(["safe", "balanced", "differential"]).optional(),
         budgetFlex: z.string().max(200).optional(),
@@ -1404,13 +1408,16 @@ export function createFplTools(options?: {
             ? await getUserThesis(userId, thesisId)
             : await getActiveThesis(userId);
           if (!thesis) {
-            return { error: "No active form thesis to synthesize." };
+            return {
+              error:
+                "No active thesis tag to annotate. Upsert beliefs first (a tag is created automatically).",
+            };
           }
           const beliefRows = await listBeliefsForThesis(userId, thesis.id);
           if (beliefRows.length === 0) {
             return {
               error:
-                "Thesis has no beliefs yet. Upsert at least one player belief before synthesizing.",
+                "No beliefs yet. Upsert at least one player belief before adding tag notes.",
             };
           }
           const result = await synthesizeFormThesis({
@@ -1424,20 +1431,20 @@ export function createFplTools(options?: {
             },
           });
           if (result.error || !result.row) {
-            return { error: result.error ?? "Synthesis failed." };
+            return { error: result.error ?? "Failed to save tag notes." };
           }
           const packed = await getThesisWithBeliefs(userId, thesis.id);
           return {
             thesis: packed?.thesis ?? serializeThesis(result.row),
             nextSteps: [
-              "Call suggest_squad (optionally save=true) to build the final team from this synthesis",
+              "Call suggest_squad (optionally save=true) to build from the active beliefs",
             ],
           };
         }),
     }),
 
     archive_form_thesis: tool({
-      description: "Archive a form thesis owned by the signed-in user.",
+      description: "Archive a thesis tag (and its belief bag) owned by the signed-in user.",
       inputSchema: z.object({
         thesisId: z.string().min(1),
       }),
@@ -1448,7 +1455,7 @@ export function createFplTools(options?: {
           }
           const row = await archiveFormThesis(userId, thesisId);
           if (!row) {
-            return { error: `Thesis ${thesisId} was not found.` };
+            return { error: `Thesis tag ${thesisId} was not found.` };
           }
           return { thesis: serializeThesis(row) };
         }),

@@ -77,7 +77,7 @@ describe("draft-types", () => {
   it("does not create a draft from a failed suggestion", () => {
     expect(
       draftFromSuggestResult({
-        error: "Active form thesis is still collecting beliefs.",
+        error: "Unable to build squad from current beliefs.",
       }),
     ).toBeNull();
   });

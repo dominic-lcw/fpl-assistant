@@ -81,4 +81,15 @@ describe("buildFollowUpsFromMessages", () => {
       true,
     );
   });
+
+  it("nudges squad build from beliefs without requiring synthesis", () => {
+    const followUps = buildFollowUpsFromMessages([
+      assistantWithTools([{ toolName: "upsert_player_belief" }]),
+    ]);
+
+    expect(followUps.some((f) => /squad from these beliefs/i.test(f.prompt))).toBe(
+      true,
+    );
+    expect(followUps.some((f) => /synthesize/i.test(f.prompt))).toBe(false);
+  });
 });

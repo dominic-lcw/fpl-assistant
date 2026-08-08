@@ -197,12 +197,11 @@ function BeliefsRailSection() {
           </p>
           {activeThesis ? (
             <p className="text-muted-foreground mt-0.5 truncate text-xs">
-              Thesis group: {activeThesis.title}
+              {activeThesis.title}
             </p>
           ) : (
             <p className="text-muted-foreground mt-0.5 text-xs">
-              Ask chat to upsert player beliefs; a thesis group is created
-              automatically.
+              No active belief group yet.
             </p>
           )}
         </div>
@@ -221,11 +220,6 @@ function BeliefsRailSection() {
           )}
         </Button>
       </div>
-      {activeThesis?.summary ? (
-        <p className="text-muted-foreground shrink-0 px-3 pb-2 text-[0.7rem] leading-relaxed">
-          {activeThesis.summary}
-        </p>
-      ) : null}
       {error ? (
         <p className="text-destructive shrink-0 px-3 pb-2 text-xs">{error}</p>
       ) : null}

@@ -21,7 +21,7 @@ The app is a Next.js standalone container (`Dockerfile` + `output: "standalone"`
 export RESOURCE_GROUP=rg-fpl-assistant
 export LOCATION=southeastasia          # or eastasia / westeurope / …
 export APP_NAME=fpl-assistant
-export ACR_NAME=fplassistantacr        # globally unique, lowercase alphanumeric
+export ACR_NAME=openclawacr            # shared registry; globally unique, lowercase alphanumeric
 export KEY_VAULT=kv-fpl-assistant      # globally unique, 3–24 chars
 export DB_SERVER=fpl-assistant-pg      # globally unique DNS name
 export DB_NAME=fpl_assistant
@@ -48,7 +48,7 @@ This creates:
 | Resource | Name (defaults) |
 |----------|-----------------|
 | Resource group | `rg-fpl-assistant` |
-| Container Registry | `fplassistantacr` |
+| Container Registry | `openclawacr` (shared; not app-specific) |
 | Log Analytics + Container Apps env | `fpl-assistant-env` |
 | PostgreSQL 16 Flexible Server (Burstable B1ms) | `fpl-assistant-pg` |
 | Key Vault secrets | `moonshot-api-key`, `auth-secret`, `auth-google-id`, `auth-google-secret`, `database-url` |

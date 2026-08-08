@@ -13,7 +13,7 @@ concurrency:
 env:
   RESOURCE_GROUP: rg-fpl-assistant
   APP_NAME: fpl-assistant
-  ACR_NAME: fplassistantacr
+  ACR_NAME: openclawacr
   IMAGE_NAME: fpl-assistant
 
 permissions:

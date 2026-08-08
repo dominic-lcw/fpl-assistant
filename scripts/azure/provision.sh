@@ -6,7 +6,7 @@
 #
 # Usage (from repo root):
 #   export LOCATION=southeastasia
-#   export ACR_NAME=fplassistantacr   # globally unique, lowercase alphanumeric
+#   export ACR_NAME=openclawacr   # shared registry; globally unique, lowercase alphanumeric
 #   export KEY_VAULT=kv-fpl-assistant  # globally unique
 #   export DB_PASSWORD='choose-a-strong-password'
 #   ./scripts/azure/provision.sh

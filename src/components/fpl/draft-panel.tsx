@@ -27,14 +27,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  ResizableHandle,
-  ResizablePanel,
-  ResizablePanelGroup,
-} from "@/components/ui/resizable";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 const POSITIONS: DraftPosition[] = ["GKP", "DEF", "MID", "FWD"];
+
+type RailTab = "thesis" | "selection" | "stats";
 
 function money(value: number) {
   return `£${value.toFixed(1)}m`;
@@ -94,7 +92,7 @@ function DraftStatsFooter() {
   const { activeDraft } = useDraftContext();
   if (!activeDraft) {
     return (
-      <div className="text-muted-foreground flex h-full flex-col justify-center px-3 text-xs">
+      <div className="text-muted-foreground flex h-full min-h-0 flex-col justify-center px-3 text-xs">
         <p className="font-medium text-foreground/80">Squad stats</p>
         <p className="mt-1 leading-relaxed">
           Cost, bank, form, and fixture scores will land here once a draft is
@@ -118,7 +116,7 @@ function DraftStatsFooter() {
   const bench = activeDraft.picks.filter((p) => p.pickPosition > 11);
 
   return (
-    <div className="flex h-full flex-col gap-3 overflow-y-auto px-3 py-3 text-sm">
+    <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto px-3 py-3 text-sm">
       <p className="text-muted-foreground text-[0.7rem] font-semibold tracking-[0.12em] uppercase">
         Stats
       </p>
@@ -186,7 +184,7 @@ function ThesisRailSection() {
   } = useThesisContext();
 
   return (
-    <div className="border-border flex min-h-0 flex-col border-b">
+    <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-start justify-between gap-2 px-3 py-2.5">
         <div className="min-w-0">
           <p className="text-muted-foreground text-[0.7rem] font-semibold tracking-[0.12em] uppercase">
@@ -224,14 +222,14 @@ function ThesisRailSection() {
         </Button>
       </div>
       {activeThesis?.summary ? (
-        <p className="text-muted-foreground px-3 pb-2 text-[0.7rem] leading-relaxed">
+        <p className="text-muted-foreground shrink-0 px-3 pb-2 text-[0.7rem] leading-relaxed">
           {activeThesis.summary}
         </p>
       ) : null}
       {error ? (
-        <p className="text-destructive px-3 pb-2 text-xs">{error}</p>
+        <p className="text-destructive shrink-0 px-3 pb-2 text-xs">{error}</p>
       ) : null}
-      <div className="max-h-40 min-h-0 overflow-y-auto px-3 pb-2">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
         {activeThesis && activeThesis.beliefs.length > 0 ? (
           <ul className="flex flex-col gap-1.5">
             {activeThesis.beliefs.map((belief) => (
@@ -403,7 +401,43 @@ function DraftSelectionBody() {
   );
 }
 
-/** Desktop right rail: vertical split — thesis + selection on top, stats below. */
+function DraftRailTabs({
+  defaultTab = "selection",
+}: {
+  defaultTab?: RailTab;
+}) {
+  return (
+    <Tabs
+      defaultValue={defaultTab}
+      className="flex h-full min-h-0 flex-col gap-0"
+    >
+      <div className="border-border shrink-0 border-b px-2 py-2">
+        <TabsList className="flex h-8 w-full" variant="default">
+          <TabsTrigger value="thesis" className="text-xs">
+            Thesis
+          </TabsTrigger>
+          <TabsTrigger value="selection" className="text-xs">
+            Selection
+          </TabsTrigger>
+          <TabsTrigger value="stats" className="text-xs">
+            Stats
+          </TabsTrigger>
+        </TabsList>
+      </div>
+      <TabsContent value="thesis" className="min-h-0 flex-1 overflow-hidden">
+        <ThesisRailSection />
+      </TabsContent>
+      <TabsContent value="selection" className="min-h-0 flex-1 overflow-hidden">
+        <DraftSelectionBody />
+      </TabsContent>
+      <TabsContent value="stats" className="min-h-0 flex-1 overflow-hidden">
+        <DraftStatsFooter />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+/** Desktop right rail: tabbed thesis / selection / stats. */
 export function DraftSideRail({ className }: { className?: string }) {
   return (
     <aside
@@ -412,20 +446,7 @@ export function DraftSideRail({ className }: { className?: string }) {
         className,
       )}
     >
-      <ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
-        <ResizablePanel defaultSize="72%" minSize="40%">
-          <div className="flex h-full min-h-0 flex-col">
-            <ThesisRailSection />
-            <div className="min-h-0 flex-1">
-              <DraftSelectionBody />
-            </div>
-          </div>
-        </ResizablePanel>
-        <ResizableHandle withHandle />
-        <ResizablePanel defaultSize="28%" minSize="18%">
-          <DraftStatsFooter />
-        </ResizablePanel>
-      </ResizablePanelGroup>
+      <DraftRailTabs />
     </aside>
   );
 }
@@ -475,20 +496,7 @@ export function MobileDraftPanel() {
           </Button>
         </div>
         <div className="h-[calc(100dvh-2.75rem)]">
-          <ResizablePanelGroup orientation="vertical" className="h-full">
-            <ResizablePanel defaultSize="70%" minSize="40%">
-              <div className="flex h-full min-h-0 flex-col">
-                <ThesisRailSection />
-                <div className="min-h-0 flex-1">
-                  <DraftSelectionBody />
-                </div>
-              </div>
-            </ResizablePanel>
-            <ResizableHandle withHandle />
-            <ResizablePanel defaultSize="30%" minSize="18%">
-              <DraftStatsFooter />
-            </ResizablePanel>
-          </ResizablePanelGroup>
+          <DraftRailTabs />
         </div>
       </DialogContent>
     </Dialog>

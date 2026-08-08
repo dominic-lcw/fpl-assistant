@@ -6,6 +6,7 @@ import {
   LoaderIcon,
   PlusIcon,
   RefreshCwIcon,
+  TrashIcon,
   XIcon,
 } from "lucide-react";
 
@@ -176,7 +177,13 @@ function DraftStatsFooter() {
 }
 
 function ThesisRailSection() {
-  const { activeThesis, loading, refreshActiveThesis } = useThesisContext();
+  const {
+    activeThesis,
+    loading,
+    error,
+    refreshActiveThesis,
+    removeBeliefFromActive,
+  } = useThesisContext();
 
   return (
     <div className="border-border flex min-h-0 flex-col border-b">
@@ -221,12 +228,29 @@ function ThesisRailSection() {
           {activeThesis.summary}
         </p>
       ) : null}
+      {error ? (
+        <p className="text-destructive px-3 pb-2 text-xs">{error}</p>
+      ) : null}
       <div className="max-h-40 min-h-0 overflow-y-auto px-3 pb-2">
         {activeThesis && activeThesis.beliefs.length > 0 ? (
           <ul className="flex flex-col gap-1.5">
             {activeThesis.beliefs.map((belief) => (
               <li key={belief.id || belief.elementId}>
-                <BeliefCard belief={belief} />
+                <BeliefCard
+                  belief={belief}
+                  deleting={loading}
+                  onDelete={(target) => {
+                    const name = target.name ?? `#${target.elementId}`;
+                    if (
+                      !window.confirm(
+                        `Clear belief for ${name}? This cannot be undone.`,
+                      )
+                    ) {
+                      return;
+                    }
+                    void removeBeliefFromActive(target.elementId);
+                  }}
+                />
               </li>
             ))}
           </ul>
@@ -248,6 +272,7 @@ function DraftSelectionBody() {
     error,
     wantsNewDraft,
     loadDraft,
+    deleteDraft,
     refreshDrafts,
     startNewDraft,
   } = useDraftContext();
@@ -331,20 +356,44 @@ function DraftSelectionBody() {
           </p>
           <ul className="flex max-h-24 flex-col gap-1 overflow-y-auto">
             {drafts.slice(0, 8).map((d) => (
-              <li key={d.id}>
+              <li
+                key={d.id}
+                className={cn(
+                  "hover:bg-muted/60 group flex items-center gap-0.5 rounded-md transition-colors",
+                  activeDraft?.id === d.id && "bg-muted",
+                )}
+              >
                 <button
                   type="button"
                   onClick={() => void loadDraft(d.id)}
-                  className={cn(
-                    "hover:bg-muted/60 w-full rounded-md px-2 py-1 text-left text-xs transition-colors",
-                    activeDraft?.id === d.id && "bg-muted",
-                  )}
+                  className="min-w-0 flex-1 px-2 py-1 text-left text-xs"
                 >
                   <span className="text-foreground font-medium">{d.title}</span>
                   <span className="text-muted-foreground ml-1.5 tabular-nums">
                     {money(d.cost)}
                   </span>
                 </button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={`Delete ${d.title}`}
+                  className="text-muted-foreground hover:text-destructive me-0.5 opacity-70 group-hover:opacity-100"
+                  disabled={loading}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (
+                      !window.confirm(
+                        `Delete saved draft “${d.title}”? This cannot be undone.`,
+                      )
+                    ) {
+                      return;
+                    }
+                    void deleteDraft(d.id);
+                  }}
+                >
+                  <TrashIcon />
+                </Button>
               </li>
             ))}
           </ul>

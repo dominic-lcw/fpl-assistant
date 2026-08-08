@@ -28,6 +28,7 @@ type ThesisContextValue = {
   setActiveThesis: (thesis: ActiveThesisView | null) => void;
   applyThesisToolResult: (result: unknown) => void;
   mergeBeliefIntoActive: (belief: ThesisBeliefView) => void;
+  removeBeliefFromActive: (elementId: number) => Promise<void>;
   refreshActiveThesis: () => Promise<void>;
 };
 
@@ -191,6 +192,49 @@ export function ThesisProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const removeBeliefFromActive = useCallback(
+    async (elementId: number) => {
+      const thesisId = activeThesis?.id;
+      if (!thesisId) {
+        setError("No active thesis to clear a belief from.");
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      try {
+        const params = new URLSearchParams({
+          elementId: String(elementId),
+          thesisId,
+        });
+        const res = await fetch(`/api/theses/beliefs?${params}`, {
+          method: "DELETE",
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(
+            typeof data.error === "string"
+              ? data.error
+              : "Failed to clear belief",
+          );
+        }
+        setActiveThesis((prev) => {
+          if (!prev || prev.id !== thesisId) return prev;
+          const beliefs = prev.beliefs.filter((b) => b.elementId !== elementId);
+          return {
+            ...prev,
+            beliefs,
+            beliefCount: beliefs.length,
+          };
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to clear belief");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [activeThesis?.id],
+  );
+
   useAssistantContext({
     getContext: () => {
       if (!activeThesis) {
@@ -215,6 +259,7 @@ export function ThesisProvider({ children }: { children: ReactNode }) {
       setActiveThesis,
       applyThesisToolResult,
       mergeBeliefIntoActive,
+      removeBeliefFromActive,
       refreshActiveThesis,
     }),
     [
@@ -223,6 +268,7 @@ export function ThesisProvider({ children }: { children: ReactNode }) {
       error,
       applyThesisToolResult,
       mergeBeliefIntoActive,
+      removeBeliefFromActive,
       refreshActiveThesis,
     ],
   );

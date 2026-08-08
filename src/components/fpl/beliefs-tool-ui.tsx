@@ -5,7 +5,7 @@ import {
   makeAssistantToolUI,
   type ToolCallMessagePartProps,
 } from "@assistant-ui/react";
-import { CircleHelpIcon } from "lucide-react";
+import { CircleHelpIcon, TrashIcon } from "lucide-react";
 
 import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
 import {
@@ -150,16 +150,21 @@ function CalculationDialog({ belief }: { belief: ThesisBeliefView }) {
 
 export function BeliefCard({
   belief,
+  onDelete,
+  deleting = false,
 }: {
   belief: ThesisBeliefView;
+  onDelete?: (belief: ThesisBeliefView) => void;
+  deleting?: boolean;
 }) {
   const deltaPositive = belief.beliefDelta >= 0;
+  const label = belief.name ?? `#${belief.elementId}`;
   return (
-    <article className="border-border/60 bg-background/80 rounded-lg border px-2.5 py-1.5">
+    <article className="border-border/60 bg-background/80 group/belief rounded-lg border px-2.5 py-1.5">
       <div className="flex min-w-0 items-center gap-2 text-xs">
         <div className="min-w-0">
           <p className="truncate font-medium">
-            {belief.name ?? `#${belief.elementId}`}
+            {label}
             <span className="text-muted-foreground ml-1 font-normal">
               {[belief.team, belief.position].filter(Boolean).join(" · ")}
             </span>
@@ -182,6 +187,19 @@ export function BeliefCard({
             Δ {signed(belief.beliefDelta)}
           </span>
           <CalculationDialog belief={belief} />
+          {onDelete ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              aria-label={`Delete belief for ${label}`}
+              className="text-muted-foreground hover:text-destructive -my-1 -mr-1 opacity-70 group-hover/belief:opacity-100"
+              disabled={deleting}
+              onClick={() => onDelete(belief)}
+            >
+              <TrashIcon />
+            </Button>
+          ) : null}
         </div>
       </div>
     </article>

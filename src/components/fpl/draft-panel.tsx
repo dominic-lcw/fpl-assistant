@@ -191,19 +191,15 @@ function BeliefsRailSection() {
             Beliefs
           </p>
           <p className="truncate text-sm font-medium">
-            {activeThesis
+            {activeThesis && activeThesis.beliefCount > 0
               ? `${activeThesis.beliefCount} belief${activeThesis.beliefCount === 1 ? "" : "s"}`
               : "No beliefs yet"}
           </p>
-          {activeThesis ? (
-            <p className="text-muted-foreground mt-0.5 truncate text-xs">
-              {activeThesis.title}
-            </p>
-          ) : (
-            <p className="text-muted-foreground mt-0.5 text-xs">
-              No active belief group yet.
-            </p>
-          )}
+          <p className="text-muted-foreground mt-0.5 text-xs">
+            {activeThesis && activeThesis.beliefCount > 0
+              ? "Priors that adjust squad and suggestion scores"
+              : "Add player beliefs in chat to shape the draft"}
+          </p>
         </div>
         <Button
           type="button"

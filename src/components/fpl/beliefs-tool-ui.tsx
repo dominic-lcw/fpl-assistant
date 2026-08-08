@@ -261,11 +261,6 @@ function UpsertBeliefRender(
   return (
     <div className="border-border/70 my-2 w-full rounded-xl border px-3 py-3">
       <p className="text-sm font-medium">Belief updated</p>
-      {typeof result.thesis?.title === "string" ? (
-        <p className="text-muted-foreground mt-0.5 text-xs">
-          {result.thesis.title}
-        </p>
-      ) : null}
       {belief ? (
         <div className="mt-2">
           <BeliefCard belief={belief} />
@@ -289,10 +284,6 @@ function ListBeliefsRender(
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-sm font-medium">Form beliefs</p>
         <p className="text-muted-foreground text-xs">
-          {typeof result.thesis?.title === "string"
-            ? String(result.thesis.title)
-            : "Active thesis"}
-          {" · "}
           {beliefs.length} player{beliefs.length === 1 ? "" : "s"}
         </p>
       </div>
@@ -534,7 +525,7 @@ function ListThesesRender(
   const theses = result.theses ?? [];
   return (
     <div className="border-border/70 my-2 w-full rounded-xl border px-3 py-3">
-      <p className="text-sm font-medium">Thesis groups</p>
+      <p className="text-sm font-medium">Belief groups</p>
       <ul className="mt-2 divide-border/50 divide-y">
         {theses.map((t) => (
           <li key={String(t.id)} className="flex justify-between gap-2 py-1.5 text-xs">

@@ -15,6 +15,7 @@ import {
 } from "@assistant-ui/react";
 
 import {
+  formatBeliefAssistantContext,
   normalizeBelief,
   thesisFromToolResult,
   type ActiveThesisView,
@@ -40,27 +41,6 @@ export function useThesisContext() {
     throw new Error("useThesisContext must be used within ThesisProvider");
   }
   return ctx;
-}
-
-function formatThesisContext(thesis: ActiveThesisView) {
-  const lines = [
-    `Active thesis group: ${thesis.title}`,
-    `Thesis group ID: ${thesis.id}`,
-    thesis.gameweek != null ? `Gameweek: ${thesis.gameweek}` : null,
-    `Beliefs: ${thesis.beliefCount}`,
-    thesis.summary ? `Notes: ${thesis.summary}` : null,
-    "Player beliefs (primary):",
-  ];
-  for (const b of thesis.beliefs.slice(0, 20)) {
-    const name = b.name ?? `#${b.elementId}`;
-    lines.push(
-      `- ${name} (${b.team ?? "?"} ${b.position ?? ""}): formBelief ${b.formBelief >= 0 ? "+" : ""}${b.formBelief.toFixed(1)}, minutesRisk ${b.minutesRisk.toFixed(2)}, confidence ${b.confidence.toFixed(2)}, expectedPoints ${b.expectedPoints != null ? b.expectedPoints.toFixed(1) : "n/a"}/${b.horizonGw}gw, delta ${b.beliefDelta >= 0 ? "+" : ""}${b.beliefDelta.toFixed(2)} — ${b.rationale}`,
-    );
-  }
-  lines.push(
-    "Upsert more beliefs as needed, then call suggest_squad (save=true when the user wants it kept). A thesis is only a group label for beliefs; notes are optional.",
-  );
-  return lines.filter(Boolean).join("\n");
 }
 
 export function ThesisProvider({ children }: { children: ReactNode }) {
@@ -189,7 +169,7 @@ export function ThesisProvider({ children }: { children: ReactNode }) {
     async (elementId: number) => {
       const thesisId = activeThesis?.id;
       if (!thesisId) {
-        setError("No active thesis to clear a belief from.");
+        setError("No active beliefs to clear from.");
         return;
       }
       setLoading(true);
@@ -229,19 +209,12 @@ export function ThesisProvider({ children }: { children: ReactNode }) {
   );
 
   useAssistantContext({
-    getContext: () => {
-      if (!activeThesis) {
-        return "No active beliefs yet. Upsert player beliefs with upsert_player_belief (a thesis group is created automatically). Then suggest_squad when ready.";
-      }
-      return formatThesisContext(activeThesis);
-    },
+    getContext: () => formatBeliefAssistantContext(activeThesis),
     disabled: !ready,
   });
 
   useAssistantInstructions(
-    activeThesis
-      ? "When discussing form or squad construction, prefer the active player beliefs in context. Quantify with compute_player_expectation, collect beliefs with upsert_player_belief, then suggest_squad. A thesis is only a group of beliefs; notes are optional."
-      : "No active beliefs yet. Upsert player beliefs directly with upsert_player_belief; do not require create_form_thesis or synthesize_form_thesis.",
+    "Plan with player beliefs and squad drafts only. Never describe an active 'thesis' or form-thesis ceremony to the user. Prefer compute_player_expectation → upsert_player_belief → suggest_squad. Do not call create_form_thesis or synthesize_form_thesis unless the user explicitly asks to name or annotate a belief group. Ignore empty leftover belief-group titles/summaries with zero beliefs.",
   );
 
   const value = useMemo<ThesisContextValue>(

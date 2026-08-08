@@ -21,7 +21,7 @@ function communityToolError(error: unknown) {
 
 /**
  * External community posts are evidence to inspect, never a recommendation
- * signal. They are intentionally not added to the user's active thesis here.
+ * signal. They are intentionally not added to the user's active beliefs here.
  */
 export function createCommunityTools() {
   return {

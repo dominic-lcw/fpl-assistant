@@ -553,7 +553,7 @@ function ListThesesRender(
   const theses = result.theses ?? [];
   return (
     <div className="border-border/70 my-2 w-full rounded-xl border px-3 py-3">
-      <p className="text-sm font-medium">Belief tags</p>
+      <p className="text-sm font-medium">Thesis groups</p>
       <ul className="mt-2 divide-border/50 divide-y">
         {theses.map((t) => (
           <li key={String(t.id)} className="flex justify-between gap-2 py-1.5 text-xs">

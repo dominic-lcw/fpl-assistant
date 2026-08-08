@@ -44,8 +44,8 @@ export function useThesisContext() {
 
 function formatThesisContext(thesis: ActiveThesisView) {
   const lines = [
-    `Active belief tag: ${thesis.title}`,
-    `Tag ID: ${thesis.id}`,
+    `Active thesis group: ${thesis.title}`,
+    `Thesis group ID: ${thesis.id}`,
     thesis.gameweek != null ? `Gameweek: ${thesis.gameweek}` : null,
     `Beliefs: ${thesis.beliefCount}`,
     thesis.summary ? `Notes: ${thesis.summary}` : null,
@@ -58,7 +58,7 @@ function formatThesisContext(thesis: ActiveThesisView) {
     );
   }
   lines.push(
-    "Upsert more beliefs as needed, then call suggest_squad (save=true when the user wants it kept). Thesis tags/notes are optional.",
+    "Upsert more beliefs as needed, then call suggest_squad (save=true when the user wants it kept). A thesis is only a group label for beliefs; notes are optional.",
   );
   return lines.filter(Boolean).join("\n");
 }
@@ -231,7 +231,7 @@ export function ThesisProvider({ children }: { children: ReactNode }) {
   useAssistantContext({
     getContext: () => {
       if (!activeThesis) {
-        return "No active beliefs yet. Upsert player beliefs with upsert_player_belief (a thesis tag is created automatically). Then suggest_squad when ready.";
+        return "No active beliefs yet. Upsert player beliefs with upsert_player_belief (a thesis group is created automatically). Then suggest_squad when ready.";
       }
       return formatThesisContext(activeThesis);
     },
@@ -240,7 +240,7 @@ export function ThesisProvider({ children }: { children: ReactNode }) {
 
   useAssistantInstructions(
     activeThesis
-      ? "When discussing form or squad construction, prefer the active player beliefs in context. Quantify with compute_player_expectation, collect beliefs with upsert_player_belief, then suggest_squad. Thesis tags/notes are optional labels only."
+      ? "When discussing form or squad construction, prefer the active player beliefs in context. Quantify with compute_player_expectation, collect beliefs with upsert_player_belief, then suggest_squad. A thesis is only a group of beliefs; notes are optional."
       : "No active beliefs yet. Upsert player beliefs directly with upsert_player_belief; do not require create_form_thesis or synthesize_form_thesis.",
   );
 

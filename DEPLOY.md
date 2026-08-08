@@ -10,7 +10,7 @@ The app is a Next.js standalone container (`Dockerfile` + `output: "standalone"`
 - Docker Desktop (or equivalent) running
 - A GCP project with billing enabled
 - Values ready (same as `.env.example` / `.env.local`):
-  - `MOONSHOT_API_KEY`
+  - `AZURE_API_KEY` + `AZURE_RESOURCE_NAME` (or `AZURE_BASE_URL`)
   - `AUTH_SECRET` — `openssl rand -base64 32`
   - `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` — Google OAuth Web client
   - `DATABASE_URL` — PostgreSQL connection URL
@@ -71,7 +71,7 @@ create_or_update_secret() {
   fi
 }
 
-create_or_update_secret MOONSHOT_API_KEY "$(get_env MOONSHOT_API_KEY)"
+create_or_update_secret AZURE_API_KEY "$(get_env AZURE_API_KEY)"
 create_or_update_secret AUTH_SECRET "$(get_env AUTH_SECRET)"
 create_or_update_secret AUTH_GOOGLE_ID "$(get_env AUTH_GOOGLE_ID)"
 create_or_update_secret AUTH_GOOGLE_SECRET "$(get_env AUTH_GOOGLE_SECRET)"
@@ -84,7 +84,7 @@ Grant the default Compute runtime service account access:
 PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
 RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 
-for SECRET in MOONSHOT_API_KEY AUTH_SECRET AUTH_GOOGLE_ID AUTH_GOOGLE_SECRET DATABASE_URL; do
+for SECRET in AZURE_API_KEY AUTH_SECRET AUTH_GOOGLE_ID AUTH_GOOGLE_SECRET DATABASE_URL; do
   gcloud secrets add-iam-policy-binding "$SECRET" \
     --member="serviceAccount:${RUNTIME_SA}" \
     --role="roles/secretmanager.secretAccessor" \
@@ -92,7 +92,7 @@ for SECRET in MOONSHOT_API_KEY AUTH_SECRET AUTH_GOOGLE_ID AUTH_GOOGLE_SECRET DAT
 done
 ```
 
-Non-secret config (`ADMIN_EMAILS`, `KIMI_MODEL`, `AUTH_TRUST_HOST`, `AUTH_URL`) goes on the Cloud Run service as env vars, not secrets.
+Non-secret config (`ADMIN_EMAILS`, `AZURE_RESOURCE_NAME`, `AZURE_MODEL`, `AUTH_TRUST_HOST`, `AUTH_URL`) goes on the Cloud Run service as env vars, not secrets.
 
 ## 4. Create Cloud SQL and migrate
 
@@ -178,8 +178,9 @@ First deploy (creates the service):
 
 ```bash
 ADMIN_EMAILS=$(get_env ADMIN_EMAILS)
-KIMI_MODEL=$(get_env KIMI_MODEL)
-KIMI_MODEL=${KIMI_MODEL:-kimi-k3}
+AZURE_RESOURCE_NAME=$(get_env AZURE_RESOURCE_NAME)
+AZURE_MODEL=$(get_env AZURE_MODEL)
+AZURE_MODEL=${AZURE_MODEL:-gpt-5.6-terra}
 
 gcloud run deploy "$SERVICE" \
   --image="$IMAGE" \
@@ -192,8 +193,8 @@ gcloud run deploy "$SERVICE" \
   --memory=1Gi \
   --timeout=60 \
   --add-cloudsql-instances="${PROJECT_ID}:${REGION}:${DB_INSTANCE}" \
-  --set-env-vars="AUTH_TRUST_HOST=true,ADMIN_EMAILS=${ADMIN_EMAILS},KIMI_MODEL=${KIMI_MODEL}" \
-  --set-secrets="MOONSHOT_API_KEY=MOONSHOT_API_KEY:latest,AUTH_SECRET=AUTH_SECRET:latest,AUTH_GOOGLE_ID=AUTH_GOOGLE_ID:latest,AUTH_GOOGLE_SECRET=AUTH_GOOGLE_SECRET:latest,DATABASE_URL=DATABASE_URL:latest"
+  --set-env-vars="AUTH_TRUST_HOST=true,ADMIN_EMAILS=${ADMIN_EMAILS},AZURE_RESOURCE_NAME=${AZURE_RESOURCE_NAME},AZURE_MODEL=${AZURE_MODEL}" \
+  --set-secrets="AZURE_API_KEY=AZURE_API_KEY:latest,AUTH_SECRET=AUTH_SECRET:latest,AUTH_GOOGLE_ID=AUTH_GOOGLE_ID:latest,AUTH_GOOGLE_SECRET=AUTH_GOOGLE_SECRET:latest,DATABASE_URL=DATABASE_URL:latest"
 ```
 
 Notes:
@@ -260,9 +261,9 @@ Env and secrets persist unless you pass `--set-env-vars` / `--set-secrets` again
 ### Update a secret later
 
 ```bash
-printf '%s' "$NEW_VALUE" | gcloud secrets versions add MOONSHOT_API_KEY --data-file=-
+printf '%s' "$NEW_VALUE" | gcloud secrets versions add AZURE_API_KEY --data-file=-
 # Cloud Run picks up :latest on new revisions; force a no-op deploy if needed:
-gcloud run services update "$SERVICE" --region="$REGION" --update-secrets=MOONSHOT_API_KEY=MOONSHOT_API_KEY:latest
+gcloud run services update "$SERVICE" --region="$REGION" --update-secrets=AZURE_API_KEY=AZURE_API_KEY:latest
 ```
 
 ## 8. CI/CD (GitHub Actions → Cloud Run)
@@ -370,5 +371,5 @@ Custom domain (`fplassistant.app`) work is tracked separately under `todos/` (gi
 - Cloud Run: request-based + `min-instances=0` → idle ≈ $0; free tier applies in many regions
 - Artifact Registry: small image storage usually free or cents
 - Secret Manager: negligible at this scale
-- Moonshot / Kimi API: billed separately (main ongoing cost)
+- Azure Foundry / web search: billed separately (main ongoing cost)
 - Google OAuth: free

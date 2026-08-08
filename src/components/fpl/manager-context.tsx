@@ -136,7 +136,7 @@ export function ManagerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useAssistantInstructions(
-    `You are helping with Fantasy Premier League analysis. Prefer tool-backed answers. Use FPL API tools for stats/fixtures/squads, compare_players or get_suggestions for side-by-side evidence, $web_search for recent news, and ask_user_choices when preferences are unclear before locking advice.`,
+    `You are helping with Fantasy Premier League analysis. Prefer tool-backed answers. Use FPL API tools for stats/fixtures/squads, compare_players or get_suggestions for side-by-side evidence, web_search for recent news, and ask_user_choices when preferences are unclear before locking advice.`,
   );
 
   useAssistantContext({

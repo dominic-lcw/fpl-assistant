@@ -50,7 +50,7 @@ Read `references/endpoints.md` for field notes, IDs, and caveats.
 7. FDR is 1 (easy) to 5 (hard).
 8. Preseason / missing picks often return 404 — surface that clearly. Prefer `suggest_squad` with `mode=draft_100` when wildcard value is unavailable.
 9. Space `/element-summary/` calls; do not batch-fetch all players unless explicitly required.
-10. For injury/press/news beyond API `news` fields, use Kimi `$web_search` / the `fpl-web-search` skill.
+10. For injury/press/news beyond API `news` fields, use Azure `web_search` / the `fpl-web-search` skill.
 11. Player beliefs are **per signed-in user only**. Workflow: `compute_player_expectation` (quantify) → `upsert_player_belief` → `suggest_squad`. Do not invent a planning thesis for the user; speak in beliefs and drafts. `create_form_thesis` / `synthesize_form_thesis` are legacy helpers — use only if the user explicitly asks to name/annotate a group. Never share across users. `expectedPoints` comes from the calculation tool / upsert auto-fill — do not invent it.
 
 ## Quick curl checks

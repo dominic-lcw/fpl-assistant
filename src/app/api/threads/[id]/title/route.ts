@@ -4,8 +4,11 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { threads } from "@/db/schema";
 import { getApprovedUser } from "@/lib/access";
-import { resolveKimiModelId } from "@/lib/kimi/models";
-import { createKimiProvider } from "@/lib/kimi/provider";
+import {
+  resolveAzureDeploymentName,
+  resolveLlmModelId,
+} from "@/lib/llm/models";
+import { createAzureProvider, isAzureConfigured } from "@/lib/llm/provider";
 import {
   buildTitleTranscript,
   fallbackTitleFromMessages,
@@ -39,13 +42,14 @@ export async function POST(request: Request, { params }: RouteContext) {
 
   let title = fallbackTitleFromMessages(messages);
 
-  if (process.env.MOONSHOT_API_KEY) {
+  if (isAzureConfigured()) {
     const transcript = buildTitleTranscript(messages);
     if (transcript) {
       try {
-        const kimi = createKimiProvider();
+        const azure = createAzureProvider();
+        const modelId = resolveLlmModelId();
         const result = await generateText({
-          model: kimi(resolveKimiModelId()),
+          model: azure(resolveAzureDeploymentName(modelId)),
           system: TITLE_SYSTEM_PROMPT,
           prompt: transcript,
           maxOutputTokens: 40,

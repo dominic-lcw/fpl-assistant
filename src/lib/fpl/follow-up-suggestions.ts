@@ -65,7 +65,7 @@ export function buildFollowUpsFromMessages(
         );
       } else if (captains[0]) {
         prompts.push(
-          `Double-check ${captains[0]} captaincy with $web_search for lineup/injury news`,
+          `Double-check ${captains[0]} captaincy with web_search for lineup/injury news`,
         );
       }
 
@@ -118,7 +118,7 @@ export function buildFollowUpsFromMessages(
       prompts.push("Any injury or lineup news that changes this comparison?");
     }
 
-    if (call.toolName === "$web_search" || call.toolName === "web_search") {
+    if (call.toolName === "web_search") {
       prompts.push("Cross-check those news findings against FPL availability fields");
       prompts.push("Update captain/transfer advice with this news");
     }

@@ -1,6 +1,6 @@
 # FPL Assistant
 
-Fantasy Premier League chat assistant built with the [assistant-ui](https://www.assistant-ui.com/) minimal template, powered by Kimi (Moonshot), and grounded in the public FPL API.
+Fantasy Premier League chat assistant built with the [assistant-ui](https://www.assistant-ui.com/) minimal template, powered by Azure AI Foundry (GPT-5.6), and grounded in the public FPL API.
 
 ## Features
 
@@ -8,14 +8,14 @@ Fantasy Premier League chat assistant built with the [assistant-ui](https://www.
 - Persistent, per-user chat threads and messages
 - Manager ID input with persisted profile snapshot
 - Live FPL tools: general info, fixtures, gameweek live, manager profile/history/squad, classic leagues, player detail
-- Kimi built-in `$web_search` for player/team/manager news (same Moonshot/Kimi chat key)
+- Azure Foundry `web_search` for player/team/manager news (Bing grounding, same Azure chat credentials)
 - Deterministic captain / transfer / watchlist suggestions from form, xGI, and fixture difficulty
 - Side-by-side suggestion comparisons in chat, clarifying-question chips (`ask_user_choices`), and follow-up prompt pills
 - Legal 15-player squad builder (`draft_100` £100m or `wildcard` from manager value) with per-user drafts in Postgres
 - Resizable right-hand draft rail (by position + stats) kept in sync with chat tools
 - Agent skills under `.agents/skills/` documenting FPL API endpoints and web-search usage
 - Minimal assistant-ui Thread chat UI with streaming responses
-- Composer model picker for Kimi K3 and Kimi K2.7
+- Composer model picker for GPT-5.6 Luna, Terra, and Sol
 - Last-reply token usage ring (assistant-ui Context Display)
 
 ## Setup
@@ -28,9 +28,10 @@ cp .env.example .env.local
 Fill in `.env.local`:
 
 ```
-MOONSHOT_API_KEY=your_key_here
-# optional default when the UI does not send a model (kimi-k3 | kimi-k2.7-code)
-KIMI_MODEL=kimi-k3
+AZURE_API_KEY=your_key_here
+AZURE_RESOURCE_NAME=your-foundry-resource
+# optional default when the UI does not send a model (gpt-5.6-luna | gpt-5.6-terra | gpt-5.6-sol)
+AZURE_MODEL=gpt-5.6-terra
 
 AUTH_SECRET=          # openssl rand -base64 32
 AUTH_GOOGLE_ID=       # Google OAuth client ID
@@ -49,7 +50,7 @@ approve, reject, revoke, or restore accounts at `/admin`.
 Project skills for coding agents live in `.agents/skills/`:
 
 - `fpl-api` — public FPL endpoints and how they map to `src/lib/fpl/*` tools
-- `fpl-web-search` — when to use Kimi `$web_search` for players, teams, and managers
+- `fpl-web-search` — when to use Azure `web_search` for players, teams, and managers
 
 Restore other locked skills from `skills-lock.json` with `npx skills experimental_install` if needed.
 
@@ -108,7 +109,7 @@ Sign in at fantasy.premierleague.com → Points / Gameweek history. Your Manager
 
 Full from-scratch walkthrough (secrets, local `linux/amd64` build, push, `AUTH_URL`, OAuth): see **[DEPLOY.md](DEPLOY.md)**.
 
-The app is a stateless Next.js container (`Dockerfile` + `output: "standalone"`). Use **min instances = 0** and **request-based billing** so personal use usually stays within Cloud Run’s free tier. Your Moonshot API usage is the main ongoing cost.
+The app is a stateless Next.js container (`Dockerfile` + `output: "standalone"`). Use **min instances = 0** and **request-based billing** so personal use usually stays within Cloud Run’s free tier. Your Azure Foundry usage is the main ongoing cost.
 
 ### 1. One-time GCP setup
 
@@ -147,8 +148,8 @@ db:migrate` from a trusted environment whenever a new migration is deployed.
 ### 3. Secrets
 
 ```bash
-# Moonshot
-printf '%s' "$MOONSHOT_API_KEY" | gcloud secrets create MOONSHOT_API_KEY --data-file=-
+# Azure Foundry
+printf '%s' "$AZURE_API_KEY" | gcloud secrets create AZURE_API_KEY --data-file=-
 
 # Auth.js
 openssl rand -base64 32 | tr -d '\n' | gcloud secrets create AUTH_SECRET --data-file=-
@@ -163,7 +164,7 @@ Grant the Cloud Run runtime service account access to these secrets (replace `PR
 PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
 RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 
-for SECRET in MOONSHOT_API_KEY AUTH_SECRET AUTH_GOOGLE_ID AUTH_GOOGLE_SECRET DATABASE_URL; do
+for SECRET in AZURE_API_KEY AUTH_SECRET AUTH_GOOGLE_ID AUTH_GOOGLE_SECRET DATABASE_URL; do
   gcloud secrets add-iam-policy-binding "$SECRET" \
     --member="serviceAccount:${RUNTIME_SA}" \
     --role="roles/secretmanager.secretAccessor"
@@ -185,8 +186,8 @@ gcloud run deploy "$SERVICE" \
   --cpu=1 \
   --memory=1Gi \
   --timeout=60 \
-  --set-env-vars="AUTH_TRUST_HOST=true,ADMIN_EMAILS=you@gmail.com,KIMI_MODEL=kimi-k3" \
-  --set-secrets="MOONSHOT_API_KEY=MOONSHOT_API_KEY:latest,AUTH_SECRET=AUTH_SECRET:latest,AUTH_GOOGLE_ID=AUTH_GOOGLE_ID:latest,AUTH_GOOGLE_SECRET=AUTH_GOOGLE_SECRET:latest,DATABASE_URL=DATABASE_URL:latest"
+  --set-env-vars="AUTH_TRUST_HOST=true,ADMIN_EMAILS=you@gmail.com,AZURE_RESOURCE_NAME=your-foundry-resource,AZURE_MODEL=gpt-5.6-terra" \
+  --set-secrets="AZURE_API_KEY=AZURE_API_KEY:latest,AUTH_SECRET=AUTH_SECRET:latest,AUTH_GOOGLE_ID=AUTH_GOOGLE_ID:latest,AUTH_GOOGLE_SECRET=AUTH_GOOGLE_SECRET:latest,DATABASE_URL=DATABASE_URL:latest"
 ```
 
 `--allow-unauthenticated` makes the Cloud Run URL publicly reachable so browsers can load the app. **App-level Auth.js** still requires Google sign-in, and only accounts approved by an administrator can access the app.
@@ -220,4 +221,4 @@ gcloud run deploy "$SERVICE" \
 - Request-based billing + `min-instances=0`: idle cost is effectively $0
 - Free tier (per billing account, Tier 1 regions like `us-central1`): ~180k vCPU-seconds, ~360k GiB-seconds, 2M requests / month
 - Artifact Registry / Cloud Build for a small personal image is usually free or cents
-- Google OAuth is free; Moonshot/Kimi usage is billed separately
+- Google OAuth is free; Azure Foundry / web search usage is billed separately

@@ -510,7 +510,7 @@ export function createFplTools(options?: {
 
     get_suggestions: tool({
       description:
-        "Build deterministic captain, transfer, and watchlist suggestions for a manager based on form, expected stats, upcoming fixture difficulty, and the signed-in user's private player form beliefs. Returns side-by-side comparison rows plus researchTargets that still need $web_search before advising.",
+        "Build deterministic captain, transfer, and watchlist suggestions for a manager based on form, expected stats, upcoming fixture difficulty, and the signed-in user's private player form beliefs. Returns side-by-side comparison rows plus researchTargets that still need web_search before advising.",
       inputSchema: z.object({
         managerId: managerIdSchema.optional(),
         gameweek: gameweekIdSchema.optional(),
@@ -573,13 +573,13 @@ export function createFplTools(options?: {
               transferIn: transferInCandidates,
             }),
             nextSteps: [
-              "If researchTargets is non-empty, call $web_search for those players before locking advice.",
+              "If researchTargets is non-empty, call web_search for those players before locking advice.",
               "Present captain and transfer comparisons with form, xGI, ownership, fixtures, and news risk.",
               "If risk appetite, budget, or differential preference is unknown, call ask_user_choices first.",
             ],
             activeBeliefCount: beliefs?.size ?? 0,
             disclaimer:
-              "Scores are heuristic (form, xGI, EP, fixture difficulty, availability, plus your private form beliefs). Always cross-check news with $web_search and treat as advice, not certainty.",
+              "Scores are heuristic (form, xGI, EP, fixture difficulty, availability, plus your private form beliefs). Always cross-check news with web_search and treat as advice, not certainty.",
           };
         }),
     }),
@@ -653,7 +653,7 @@ export function createFplTools(options?: {
             }),
             activeBeliefCount: beliefs?.size ?? 0,
             disclaimer:
-              "Comparison uses FPL API form/xGI/fixtures plus your private form beliefs. Use $web_search when researchTargets is non-empty.",
+              "Comparison uses FPL API form/xGI/fixtures plus your private form beliefs. Use web_search when researchTargets is non-empty.",
           };
         }),
     }),

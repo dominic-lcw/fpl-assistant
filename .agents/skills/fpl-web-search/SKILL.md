@@ -1,6 +1,6 @@
 ---
 name: fpl-web-search
-description: Search the web for Fantasy Premier League topics — player news, injuries, team press, manager lineups, price-change chatter, and tactical context — via Kimi built-in $web_search. Use when FPL API stats are not enough or the user asks about recent news on players, teams, or managers.
+description: Search the web for Fantasy Premier League topics — player news, injuries, team press, manager lineups, price-change chatter, and tactical context — via Azure Foundry web_search. Use when FPL API stats are not enough or the user asks about recent news on players, teams, or managers.
 ---
 
 # FPL Web Search Skill
@@ -27,14 +27,14 @@ Prefer the chat `ask_user_choices` tool when risk appetite, budget flexibility, 
 
 ## In this repo
 
-The chat assistant exposes Kimi's built-in `$web_search`:
+The chat assistant exposes Azure Foundry's built-in `web_search` (Responses API / Bing grounding):
 
-1. Declared as `type: "builtin_function"` / `function.name: "$web_search"` (see `src/lib/kimi/builtin-web-search.ts`).
-2. `createKimiProvider()` rewrites AI SDK function tools into that builtin form before each Moonshot request.
-3. Tool `execute` **echoes the model arguments as-is** — Kimi itself runs the search.
+1. Created via `azure.tools.webSearch()` in `src/lib/llm/web-search.ts`.
+2. Attached in `src/app/api/chat/route.ts` alongside FPL and community tools.
+3. The model runs search server-side; cite returned URL sources in the reply.
 4. After news findings, re-check API availability fields (`status`, `chance_of_playing_*`, `news`) before advising.
 
-Do **not** call Moonshot Formula `moonshot/web-search:latest` for this app — use the model builtin.
+Uses the same Azure Foundry credentials as chat (`AZURE_API_KEY` + resource/endpoint). No separate search key.
 
 ## Coding agents
 

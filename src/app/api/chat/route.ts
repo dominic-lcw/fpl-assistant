@@ -15,9 +15,12 @@ import { createCommunityTools } from "@/lib/community/tools";
 import { createFplTools } from "@/lib/fpl/tools";
 import { getApprovedUser } from "@/lib/access";
 import { managerIdSchema } from "@/lib/fpl/validation";
-import { createKimiBuiltinWebSearchTool } from "@/lib/kimi/builtin-web-search";
-import { resolveKimiModelId } from "@/lib/kimi/models";
-import { createKimiProvider } from "@/lib/kimi/provider";
+import {
+  resolveAzureDeploymentName,
+  resolveLlmModelId,
+} from "@/lib/llm/models";
+import { createAzureProvider, isAzureConfigured } from "@/lib/llm/provider";
+import { createAzureWebSearchTool } from "@/lib/llm/web-search";
 
 export const maxDuration = 60;
 
@@ -45,7 +48,7 @@ Belief tools (private per user — never shared; beliefs are primary):
 
 Interactive / web tools:
 - ask_user_choices → pause and ask a multiple-choice clarifying question in the UI. Wait for the user's tap.
-- $web_search → injuries, press, lineups, and other off-API FPL context
+- web_search → injuries, press, lineups, and other off-API FPL context (Azure Foundry Bing grounding)
 - list_reddit_fpl_threads → recent posts from user-selected FPL subreddits; community evidence only
 
 Squad rules (always enforce via suggest_squad, never invent illegal squads):
@@ -54,7 +57,7 @@ Squad rules (always enforce via suggest_squad, never invent illegal squads):
 - draft_100 budget £100.0m; wildcard budget = manager squad value + bank
 
 Belief workflow (explicit — do this for squad construction):
-1. Gather evidence (FPL tools + $web_search). Call compute_player_expectation to quantify xPts, then upsert_player_belief for each contested player.
+1. Gather evidence (FPL tools + web_search). Call compute_player_expectation to quantify xPts, then upsert_player_belief for each contested player.
 2. Optionally ask_user_choices for risk / differential preference.
 3. suggest_squad (save=true when the user wants it kept).
 4. Never invent a planning "thesis" for the user. Speak only in player beliefs and squad drafts. If context shows zero beliefs, say so — do not narrate leftover group titles or summaries.
@@ -74,7 +77,7 @@ Advice workflow (captain/transfers):
 2. Pull official numbers with FPL tools. Never invent stats, prices, ranks, or IDs.
 3. For a novel ranking or calculation, use analyze_fpl_data rather than guessing. It supports normal DuckDB SQL (CTEs, joins, windows, aggregates) over a fresh snapshot. Inspect the tables returned by the tool; never assume a column exists.
 4. If form/news diverges from the API, upsert beliefs, then re-run suggestions/comparisons.
-5. If researchTargets is non-empty, call $web_search, then re-check API availability.
+5. If researchTargets is non-empty, call web_search, then re-check API availability.
 6. Present a short comparison of the top 2–3 options with evidence. Explain why #1 beats #2.
 7. Give a clear recommendation framed as advice, not certainty. Include the relevant gameweek.
 
@@ -82,7 +85,7 @@ Rules:
 - Resolve player names via get_general_information / bootstrap data before get_player_detailed_data or compare_players.
 - If a manager ID is present in context, use it by default for manager/squad/suggestion/wildcard tools.
 - If data is unavailable (preseason, missing picks, API errors), say so clearly.
-- Prefer concise, actionable markdown. Cite web sources when $web_search was used.`;
+- Prefer concise, actionable markdown. Cite web sources when web_search was used.`;
 
 function extractManagerId(system?: string): number | undefined {
   if (!system) return undefined;
@@ -124,23 +127,24 @@ export async function POST(req: Request) {
     }
   }
 
-  if (!process.env.MOONSHOT_API_KEY) {
+  if (!isAzureConfigured()) {
     return new Response(
       JSON.stringify({
         error:
-          "Missing MOONSHOT_API_KEY. Add it to .env.local (see .env.example).",
+          "Missing Azure Foundry credentials. Set AZURE_API_KEY and AZURE_RESOURCE_NAME (or AZURE_BASE_URL). See .env.example.",
       }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
 
-  const modelId = resolveKimiModelId(model);
+  const modelId = resolveLlmModelId(model);
+  const deploymentName = resolveAzureDeploymentName(modelId);
   const managerId = extractManagerId(system);
   const fplTools = createFplTools({ managerId, userId: user.id });
-  const kimi = createKimiProvider();
+  const azure = createAzureProvider();
 
   const result = streamText({
-    model: kimi(modelId),
+    model: azure(deploymentName),
     system: [SYSTEM_PROMPT, system].filter(Boolean).join("\n\n"),
     messages: await convertToModelMessages(messages),
     stopWhen: stepCountIs(12),
@@ -148,7 +152,7 @@ export async function POST(req: Request) {
       ...frontendTools(frontendToolDefs as never),
       ...fplTools,
       ...createCommunityTools(),
-      ...createKimiBuiltinWebSearchTool(),
+      ...createAzureWebSearchTool(azure),
     },
   });
 

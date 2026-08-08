@@ -32,7 +32,7 @@ import { cn } from "@/lib/utils";
 
 const POSITIONS: DraftPosition[] = ["GKP", "DEF", "MID", "FWD"];
 
-type RailTab = "thesis" | "selection" | "stats";
+type RailTab = "beliefs" | "selection" | "stats";
 
 function money(value: number) {
   return `£${value.toFixed(1)}m`;
@@ -174,7 +174,7 @@ function DraftStatsFooter() {
   );
 }
 
-function ThesisRailSection() {
+function BeliefsRailSection() {
   const {
     activeThesis,
     loading,
@@ -197,11 +197,11 @@ function ThesisRailSection() {
           </p>
           {activeThesis ? (
             <p className="text-muted-foreground mt-0.5 truncate text-xs">
-              Tag: {activeThesis.title}
+              {activeThesis.title}
             </p>
           ) : (
             <p className="text-muted-foreground mt-0.5 text-xs">
-              Ask chat to upsert player beliefs; a tag is created automatically.
+              No active belief group yet.
             </p>
           )}
         </div>
@@ -220,11 +220,6 @@ function ThesisRailSection() {
           )}
         </Button>
       </div>
-      {activeThesis?.summary ? (
-        <p className="text-muted-foreground shrink-0 px-3 pb-2 text-[0.7rem] leading-relaxed">
-          {activeThesis.summary}
-        </p>
-      ) : null}
       {error ? (
         <p className="text-destructive shrink-0 px-3 pb-2 text-xs">{error}</p>
       ) : null}
@@ -412,8 +407,8 @@ function DraftRailTabs({
     >
       <div className="border-border shrink-0 border-b px-2 py-2">
         <TabsList className="flex h-8 w-full" variant="default">
-          <TabsTrigger value="thesis" className="text-xs">
-            Thesis
+          <TabsTrigger value="beliefs" className="text-xs">
+            Beliefs
           </TabsTrigger>
           <TabsTrigger value="selection" className="text-xs">
             Selection
@@ -423,8 +418,8 @@ function DraftRailTabs({
           </TabsTrigger>
         </TabsList>
       </div>
-      <TabsContent value="thesis" className="min-h-0 flex-1 overflow-hidden">
-        <ThesisRailSection />
+      <TabsContent value="beliefs" className="min-h-0 flex-1 overflow-hidden">
+        <BeliefsRailSection />
       </TabsContent>
       <TabsContent value="selection" className="min-h-0 flex-1 overflow-hidden">
         <DraftSelectionBody />
@@ -436,7 +431,7 @@ function DraftRailTabs({
   );
 }
 
-/** Desktop right rail: tabbed thesis / selection / stats. */
+/** Desktop right rail: tabbed beliefs / selection / stats. */
 export function DraftSideRail({ className }: { className?: string }) {
   return (
     <aside

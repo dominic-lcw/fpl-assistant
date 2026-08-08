@@ -263,16 +263,13 @@ function UpsertBeliefRender(
       <p className="text-sm font-medium">Belief updated</p>
       {typeof result.thesis?.title === "string" ? (
         <p className="text-muted-foreground mt-0.5 text-xs">
-          Thesis: {result.thesis.title}
+          {result.thesis.title}
         </p>
       ) : null}
       {belief ? (
         <div className="mt-2">
           <BeliefCard belief={belief} />
         </div>
-      ) : null}
-      {result.note ? (
-        <p className="text-muted-foreground mt-2 text-[0.7rem]">{result.note}</p>
       ) : null}
     </div>
   );
@@ -439,11 +436,8 @@ type ThesisToolResult = {
 
 function ThesisCard({
   title,
-  status,
-  summary,
   beliefCount,
   beliefs,
-  nextSteps,
 }: {
   title: string;
   status: string;
@@ -456,26 +450,13 @@ function ThesisCard({
     <div className="border-border/70 my-2 w-full rounded-xl border px-3 py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-sm font-medium">{title}</p>
-        <p className="text-muted-foreground text-[0.7rem] font-semibold tracking-[0.1em] uppercase">
-          {status}
-        </p>
+        {beliefCount != null ? (
+          <p className="text-muted-foreground text-xs">
+            {beliefCount} belief{beliefCount === 1 ? "" : "s"}
+          </p>
+        ) : null}
       </div>
-      {beliefCount != null ? (
-        <p className="text-muted-foreground mt-0.5 text-xs">
-          {beliefCount} belief{beliefCount === 1 ? "" : "s"}
-        </p>
-      ) : null}
-      {summary ? (
-        <p className="mt-2 text-xs leading-relaxed">{summary}</p>
-      ) : null}
       {beliefs && beliefs.length > 0 ? <BeliefList beliefs={beliefs} /> : null}
-      {nextSteps && nextSteps.length > 0 ? (
-        <ol className="text-muted-foreground mt-2 list-decimal space-y-0.5 ps-4 text-xs">
-          {nextSteps.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
-      ) : null}
     </div>
   );
 }
@@ -553,7 +534,7 @@ function ListThesesRender(
   const theses = result.theses ?? [];
   return (
     <div className="border-border/70 my-2 w-full rounded-xl border px-3 py-3">
-      <p className="text-sm font-medium">Belief tags</p>
+      <p className="text-sm font-medium">Thesis groups</p>
       <ul className="mt-2 divide-border/50 divide-y">
         {theses.map((t) => (
           <li key={String(t.id)} className="flex justify-between gap-2 py-1.5 text-xs">

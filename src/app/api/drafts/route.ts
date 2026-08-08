@@ -1,5 +1,9 @@
 import { getApprovedUser } from "@/lib/access";
-import { getActiveBeliefMap } from "@/lib/fpl/theses";
+import {
+  getActiveBeliefMap,
+  getActiveThesis,
+  markThesisApplied,
+} from "@/lib/fpl/theses";
 import {
   listUserDrafts,
   saveBuiltSquadDraft,
@@ -18,8 +22,10 @@ import {
   getManagerPicks,
 } from "@/lib/fpl/client";
 import { getRelevantGameweek } from "@/lib/fpl/analysis";
-import { managerIdSchema } from "@/lib/fpl/validation";
-import type { SquadDraftPick } from "@/db/schema";
+import {
+  managerIdSchema,
+  squadDraftPicksSchema,
+} from "@/lib/fpl/validation";
 import { z } from "zod";
 
 const generateBodySchema = z.object({
@@ -28,6 +34,7 @@ const generateBodySchema = z.object({
   gameweek: z.number().int().positive().optional(),
   title: z.string().min(1).max(120).optional(),
   save: z.boolean().optional().default(true),
+  force: z.boolean().optional().default(false),
 });
 
 const saveBodySchema = z.object({
@@ -36,7 +43,7 @@ const saveBodySchema = z.object({
   title: z.string().min(1).max(120),
   mode: z.enum(["draft_100", "wildcard"]),
   budgetTenths: z.number().int().positive().optional(),
-  picks: z.array(z.record(z.string(), z.unknown())),
+  picks: squadDraftPicksSchema,
   managerId: managerIdSchema.optional().nullable(),
   gameweek: z.number().int().positive().optional().nullable(),
   notes: z.string().max(2000).optional().nullable(),
@@ -64,7 +71,6 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
-    const picks = parsed.data.picks as unknown as SquadDraftPick[];
     const budgetTenths =
       parsed.data.budgetTenths ??
       (parsed.data.mode === "draft_100" ? DRAFT_BUDGET_TENTHS : 0);
@@ -80,14 +86,20 @@ export async function POST(req: Request) {
       title: parsed.data.title,
       mode: parsed.data.mode,
       budgetTenths,
-      picks,
+      picks: parsed.data.picks,
       managerId: parsed.data.managerId,
       gameweek: parsed.data.gameweek,
       notes: parsed.data.notes,
       status: parsed.data.status,
     });
     if (result.error || !result.row) {
-      return Response.json({ error: result.error ?? "Save failed" }, { status: 404 });
+      return Response.json(
+        {
+          error: result.error ?? "Save failed",
+          issues: result.issues,
+        },
+        { status: result.error === "Draft not found." ? 404 : 422 },
+      );
     }
     return Response.json({
       draft: serializeDraft(result.row),
@@ -103,7 +115,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const { mode, managerId, gameweek, title, save } = parsed.data;
+  const { mode, managerId, gameweek, title, save, force } = parsed.data;
   const [bootstrap, fixtures] = await Promise.all([
     getBootstrapStatic(),
     getFixtures(),
@@ -133,7 +145,19 @@ export async function POST(req: Request) {
     budgetTenths = picks.entry_history.value + picks.entry_history.bank;
   }
 
-  const beliefs = await getActiveBeliefMap(user.id);
+  const [beliefs, activeThesis] = await Promise.all([
+    getActiveBeliefMap(user.id),
+    getActiveThesis(user.id),
+  ]);
+  if (activeThesis?.status === "collecting" && !force) {
+    return Response.json(
+      {
+        error:
+          "Active form thesis is still collecting beliefs. Synthesize it before generating a squad, or pass force=true to override.",
+      },
+      { status: 409 },
+    );
+  }
   const built = buildLegalSquad({
     bootstrap,
     fixtures,
@@ -154,7 +178,7 @@ export async function POST(req: Request) {
     });
   }
 
-  const row = await saveBuiltSquadDraft({
+  const result = await saveBuiltSquadDraft({
     userId: user.id,
     title:
       title ??
@@ -165,8 +189,31 @@ export async function POST(req: Request) {
     managerId: resolvedManagerId ?? null,
   });
 
+  if (result.error || !result.row) {
+    return Response.json(
+      {
+        error: result.error ?? "Generated squad is invalid.",
+        issues: result.issues,
+        built: {
+          valid: built.valid,
+          issues: built.issues,
+          averageScore: built.averageScore,
+        },
+      },
+      { status: 422 },
+    );
+  }
+
+  if (activeThesis) {
+    await markThesisApplied({
+      userId: user.id,
+      thesisId: activeThesis.id,
+      linkedDraftId: result.row.id,
+    });
+  }
+
   return Response.json({
-    draft: serializeDraft(row),
+    draft: serializeDraft(result.row),
     built: {
       valid: built.valid,
       issues: built.issues,

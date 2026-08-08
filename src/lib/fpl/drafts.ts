@@ -6,12 +6,17 @@ import {
   type SquadDraftPick,
 } from "@/db/schema";
 
-import type { BuiltSquad, SquadBuildMode } from "./squad";
+import type {
+  BuiltSquad,
+  SquadBuildMode,
+  SquadValidationIssue,
+} from "./squad";
 import { validateSquadPicks } from "./squad";
 
 export type SquadDraftRow = typeof squadDrafts.$inferSelect;
 
 export function serializeDraft(row: SquadDraftRow) {
+  const issues = validateSquadPicks(row.picks, row.budgetTenths);
   return {
     id: row.id,
     title: row.title,
@@ -24,8 +29,18 @@ export function serializeDraft(row: SquadDraftRow) {
     gameweek: row.gameweek,
     picks: row.picks,
     notes: row.notes,
+    valid: issues.length === 0,
+    issues,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+function invalidSaveResult(issues: SquadValidationIssue[]) {
+  return {
+    row: null,
+    issues,
+    error: "Draft does not satisfy FPL squad rules." as const,
   };
 }
 
@@ -55,6 +70,21 @@ export async function saveBuiltSquadDraft(params: {
   notes?: string | null;
   status?: "draft" | "active" | "archived";
 }) {
+  const validationIssues = validateSquadPicks(
+    params.built.picks,
+    params.built.budgetTenths,
+  );
+  const issues = [...params.built.issues, ...validationIssues].filter(
+    (issue, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.code === issue.code && candidate.message === issue.message,
+      ) === index,
+  );
+  if (!params.built.valid || issues.length > 0) {
+    return invalidSaveResult(issues);
+  }
+
   const id = crypto.randomUUID();
   const now = new Date();
   const [row] = await db
@@ -76,7 +106,7 @@ export async function saveBuiltSquadDraft(params: {
       updatedAt: now,
     })
     .returning();
-  return row;
+  return { row, issues: [], error: null };
 }
 
 export async function upsertManualDraft(params: {
@@ -92,6 +122,9 @@ export async function upsertManualDraft(params: {
   status?: "draft" | "active" | "archived";
 }) {
   const issues = validateSquadPicks(params.picks, params.budgetTenths);
+  if (issues.length > 0) {
+    return invalidSaveResult(issues);
+  }
   const costTenths = params.picks.reduce(
     (sum, p) => sum + Math.round(p.cost * 10),
     0,

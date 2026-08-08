@@ -34,6 +34,7 @@ type DraftContextValue = {
   applySuggestResult: (result: unknown) => void;
   loadDraft: (draftId: string) => Promise<void>;
   refreshDrafts: () => Promise<void>;
+  removeDraft: (draftId: string) => void;
   startNewDraft: () => void;
   clearWantsNewDraft: () => void;
 };
@@ -95,6 +96,8 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       const res = await fetch("/api/drafts");
       if (res.status === 403) {
         setDrafts([]);
+        setActiveDraftState(null);
+        window.localStorage.removeItem(ACTIVE_DRAFT_KEY);
         return;
       }
       const data = await res.json();
@@ -227,6 +230,15 @@ export function DraftProvider({ children }: { children: ReactNode }) {
     window.localStorage.removeItem(ACTIVE_DRAFT_KEY);
   }, []);
 
+  const removeDraft = useCallback((draftId: string) => {
+    setDrafts((current) => current.filter((draft) => draft.id !== draftId));
+    setActiveDraftState((current) => {
+      if (current?.id !== draftId) return current;
+      window.localStorage.removeItem(ACTIVE_DRAFT_KEY);
+      return null;
+    });
+  }, []);
+
   const clearWantsNewDraft = useCallback(() => {
     setWantsNewDraft(false);
   }, []);
@@ -261,6 +273,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       applySuggestResult,
       loadDraft,
       refreshDrafts,
+      removeDraft,
       startNewDraft,
       clearWantsNewDraft,
     }),
@@ -274,6 +287,7 @@ export function DraftProvider({ children }: { children: ReactNode }) {
       applySuggestResult,
       loadDraft,
       refreshDrafts,
+      removeDraft,
       startNewDraft,
       clearWantsNewDraft,
     ],

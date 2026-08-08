@@ -6,7 +6,7 @@ import {
   upsertManualDraft,
 } from "@/lib/fpl/drafts";
 import { DRAFT_BUDGET_TENTHS } from "@/lib/fpl/squad";
-import type { SquadDraftPick } from "@/db/schema";
+import { squadDraftPicksSchema } from "@/lib/fpl/validation";
 import { z } from "zod";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -15,7 +15,7 @@ const patchSchema = z.object({
   title: z.string().min(1).max(120).optional(),
   status: z.enum(["draft", "active", "archived"]).optional(),
   notes: z.string().max(2000).optional().nullable(),
-  picks: z.array(z.record(z.string(), z.unknown())).optional(),
+  picks: squadDraftPicksSchema.optional(),
   budgetTenths: z.number().int().positive().optional(),
   mode: z.enum(["draft_100", "wildcard"]).optional(),
   managerId: z.number().int().positive().optional().nullable(),
@@ -57,8 +57,7 @@ export async function PATCH(req: Request, context: RouteContext) {
       parsed.data.budgetTenths ??
       existing.budgetTenths ??
       DRAFT_BUDGET_TENTHS,
-    picks: (parsed.data.picks as unknown as SquadDraftPick[] | undefined) ??
-      existing.picks,
+    picks: parsed.data.picks ?? existing.picks,
     managerId:
       parsed.data.managerId === undefined
         ? existing.managerId
@@ -73,7 +72,13 @@ export async function PATCH(req: Request, context: RouteContext) {
   });
 
   if (!result.row) {
-    return Response.json({ error: result.error ?? "Update failed" }, { status: 404 });
+    return Response.json(
+      {
+        error: result.error ?? "Update failed",
+        issues: result.issues,
+      },
+      { status: result.error === "Draft not found." ? 404 : 422 },
+    );
   }
 
   return Response.json({

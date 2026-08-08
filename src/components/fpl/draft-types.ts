@@ -119,7 +119,12 @@ export function draftFromSuggestResult(
       (saved && typeof saved.title === "string" && saved.title) ||
       (mode === "draft_100" ? "£100m draft" : "Wildcard draft"),
     mode,
-    status: saved ? "draft" : "ephemeral",
+    status:
+      saved?.status === "active" || saved?.status === "archived"
+        ? saved.status
+        : saved
+          ? "draft"
+          : "ephemeral",
     budget: num(result.budget ?? saved?.budget, 100),
     bank: num(result.bank ?? saved?.bank),
     cost: num(result.cost ?? saved?.cost),
@@ -166,6 +171,7 @@ export function draftFromApi(raw: Record<string, unknown>): DraftSummary {
     managerId: raw.managerId != null ? num(raw.managerId) : null,
     gameweek: raw.gameweek != null ? num(raw.gameweek) : null,
     picks,
+    valid: typeof raw.valid === "boolean" ? raw.valid : undefined,
     notes: typeof raw.notes === "string" ? raw.notes : null,
     updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : null,
   };

@@ -31,6 +31,7 @@ import {
 } from "@/components/fpl/draft-panel";
 import { AskUserChoicesTool } from "@/components/fpl/ask-user-tool";
 import {
+  DeleteSquadDraftToolSync,
   GetSquadDraftToolSync,
   SuggestSquadToolSync,
 } from "@/components/fpl/draft-tool-sync";
@@ -124,6 +125,7 @@ function AssistantRuntimeShell({ authSlot }: { authSlot?: ReactNode }) {
             <AskUserChoicesTool />
             <SuggestSquadToolSync />
             <GetSquadDraftToolSync />
+            <DeleteSquadDraftToolSync />
             <GetSuggestionsToolUI />
             <ComparePlayersToolUI />
             <CreateFormThesisToolUI />

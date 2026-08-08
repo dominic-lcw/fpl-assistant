@@ -773,7 +773,7 @@ export function createFplTools(options?: {
                 },
               };
             }
-            const row = await saveBuiltSquadDraft({
+            const savedResult = await saveBuiltSquadDraft({
               userId,
               title:
                 title ??
@@ -783,20 +783,31 @@ export function createFplTools(options?: {
               built,
               managerId: resolvedManagerId ?? null,
             });
-            saved = serializeDraft(row);
+            if (!savedResult.row) {
+              return {
+                error: savedResult.error ?? "Unable to save invalid squad draft.",
+                issues: savedResult.issues,
+                squad: {
+                  mode: built.mode,
+                  valid: built.valid,
+                  issues: built.issues,
+                  gameweek: built.gameweek,
+                  budget: built.budgetTenths / 10,
+                  cost: built.costTenths / 10,
+                  bank: built.bankTenths / 10,
+                  averageScore: built.averageScore,
+                  picks: built.picks.map(compactDraftPick),
+                },
+              };
+            }
+            saved = serializeDraft(savedResult.row);
             if (activeThesis) {
               await markThesisApplied({
                 userId,
                 thesisId: activeThesis.id,
-                linkedDraftId: row.id,
+                linkedDraftId: savedResult.row.id,
               });
             }
-          } else if (activeThesis && activeThesis.status === "synthesized") {
-            await markThesisApplied({
-              userId: userId!,
-              thesisId: activeThesis.id,
-              linkedDraftId: activeThesis.linkedDraftId,
-            });
           }
 
           return {

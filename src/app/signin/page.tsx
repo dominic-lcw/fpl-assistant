@@ -17,7 +17,7 @@ function signInErrorMessage(error?: string) {
       return "Google sign-in callback failed. Confirm https://fplassistant.app/api/auth/callback/google is in the Google OAuth client.";
     case "AdapterError":
     case "OAuthAccountNotLinked":
-      return "Could not create your account in the database. Confirm Cloud SQL is connected and migrations have run.";
+      return "Could not create your account in the database. Confirm Postgres is reachable and migrations have run.";
     default:
       return error ? `Sign-in failed (${error}). Try again.` : null;
   }

@@ -1,374 +1,242 @@
-# Deploy FPL Assistant to Cloud Run
+# Deploy FPL Assistant to Azure
 
-From-scratch guide matching how this app was first deployed: **local Docker build → Artifact Registry → Cloud Run**, with secrets in Secret Manager.
+From-scratch guide for a new Azure subscription: **local Docker build → Azure Container Registry → Container Apps**, with **Azure Database for PostgreSQL (Flexible Server)** and secrets in **Key Vault**.
 
 The app is a Next.js standalone container (`Dockerfile` + `output: "standalone"` in `next.config.ts`).
 
 ## Prerequisites
 
-- [Google Cloud SDK](https://cloud.google.com/sdk/docs/install) (`gcloud`)
+- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) (`az`) — logged into your **new subscription** (`az login` / `az account set`)
 - Docker Desktop (or equivalent) running
-- A GCP project with billing enabled
+- Node 20 + pnpm (for `pnpm db:migrate`)
 - Values ready (same as `.env.example` / `.env.local`):
   - `MOONSHOT_API_KEY`
   - `AUTH_SECRET` — `openssl rand -base64 32`
   - `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` — Google OAuth Web client
-  - `DATABASE_URL` — PostgreSQL connection URL
   - `ADMIN_EMAILS` — comma-separated bootstrap administrator emails
 
-## Variables used in this project
+## Variables
 
 ```bash
-export PROJECT_ID=openclaw-dominic-209
-export REGION=asia-southeast1
-export SERVICE=fpl-assistant
-export REPO=fpl-assistant
-export IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${SERVICE}:latest"
-
-gcloud config set project "$PROJECT_ID"
-gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
-```
-
-Use another project/region if needed; keep `REGION` consistent for Artifact Registry and Cloud Run.
-
-## 1. Enable APIs
-
-```bash
-gcloud services enable \
-  run.googleapis.com \
-  sqladmin.googleapis.com \
-  artifactregistry.googleapis.com \
-  secretmanager.googleapis.com \
-  cloudbuild.googleapis.com
-```
-
-(`cloudbuild` is optional if you only build locally.)
-
-## 2. Create Artifact Registry repo
-
-```bash
-gcloud artifacts repositories create "$REPO" \
-  --repository-format=docker \
-  --location="$REGION" \
-  --description="FPL Assistant images"
-```
-
-Skip if the repo already exists.
-
-## 3. Create secrets
-
-Load from `.env.local` (or export by hand). Do not commit secrets.
-
-```bash
-get_env() { grep "^$1=" .env.local | sed "s/^$1=//"; }
-
-create_or_update_secret() {
-  local name="$1" value="$2"
-  if gcloud secrets describe "$name" >/dev/null 2>&1; then
-    printf '%s' "$value" | gcloud secrets versions add "$name" --data-file=-
-  else
-    printf '%s' "$value" | gcloud secrets create "$name" --data-file=-
-  fi
-}
-
-create_or_update_secret MOONSHOT_API_KEY "$(get_env MOONSHOT_API_KEY)"
-create_or_update_secret AUTH_SECRET "$(get_env AUTH_SECRET)"
-create_or_update_secret AUTH_GOOGLE_ID "$(get_env AUTH_GOOGLE_ID)"
-create_or_update_secret AUTH_GOOGLE_SECRET "$(get_env AUTH_GOOGLE_SECRET)"
-create_or_update_secret DATABASE_URL "$(get_env DATABASE_URL)"
-```
-
-Grant the default Compute runtime service account access:
-
-```bash
-PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
-RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
-
-for SECRET in MOONSHOT_API_KEY AUTH_SECRET AUTH_GOOGLE_ID AUTH_GOOGLE_SECRET DATABASE_URL; do
-  gcloud secrets add-iam-policy-binding "$SECRET" \
-    --member="serviceAccount:${RUNTIME_SA}" \
-    --role="roles/secretmanager.secretAccessor" \
-    --quiet
-done
-```
-
-Non-secret config (`ADMIN_EMAILS`, `KIMI_MODEL`, `AUTH_TRUST_HOST`, `AUTH_URL`) goes on the Cloud Run service as env vars, not secrets.
-
-## 4. Create Cloud SQL and migrate
-
-Create a single-zone PostgreSQL instance in the same region as Cloud Run. The
-following uses the smallest shared-core tier for personal/low-traffic usage;
-it is not highly available.
-
-```bash
-export DB_INSTANCE=fpl-assistant-db
+export RESOURCE_GROUP=rg-fpl-assistant
+export LOCATION=southeastasia          # or eastasia / westeurope / …
+export APP_NAME=fpl-assistant
+export ACR_NAME=dominicacr            # shared registry; globally unique, lowercase alphanumeric
+export KEY_VAULT=kv-fpl-assistant      # globally unique, 3–24 chars
+export DB_SERVER=fpl-assistant-pg      # globally unique DNS name
 export DB_NAME=fpl_assistant
 export DB_USER=fpl_assistant
-
-gcloud sql instances create "$DB_INSTANCE" \
-  --database-version=POSTGRES_16 \
-  --edition=ENTERPRISE \
-  --tier=db-f1-micro \
-  --region="$REGION" \
-  --storage-size=10GB \
-  --storage-auto-increase \
-  --backup-start-time=03:00
-
-gcloud sql databases create "$DB_NAME" --instance="$DB_INSTANCE"
-gcloud sql users create "$DB_USER" --instance="$DB_INSTANCE" --password='CHOOSE_A_STRONG_PASSWORD'
-```
-
-### Cloud Run `DATABASE_URL` (Unix socket)
-
-```bash
 export DB_PASSWORD='CHOOSE_A_STRONG_PASSWORD'
-export DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@/${DB_NAME}?host=/cloudsql/${PROJECT_ID}:${REGION}:${DB_INSTANCE}"
-printf '%s' "$DATABASE_URL" | gcloud secrets create DATABASE_URL --data-file=-
-# or: gcloud secrets versions add DATABASE_URL --data-file=-
+export ACA_ENV=fpl-assistant-env
+export GITHUB_REPO=dominic-lcw/fpl-assistant
+
+az account show   # confirm the new subscription
+# az account set --subscription '<subscription-id-or-name>'
 ```
 
-The Cloud Run service account needs the Cloud SQL Client role:
+## 1. One-command provision (recommended)
+
+From the repo root, with `.env.local` filled in:
 
 ```bash
-gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-  --member="serviceAccount:${RUNTIME_SA}" \
-  --role="roles/cloudsql.client"
+chmod +x scripts/azure/*.sh scripts/gcp/*.sh
+./scripts/azure/provision.sh
 ```
 
-### Local `DATABASE_URL` (same instance via Auth Proxy)
+This creates:
 
-Install [Cloud SQL Auth Proxy](https://cloud.google.com/sql/docs/postgres/connect-auth-proxy), grant your user `roles/cloudsql.client`, then:
+| Resource | Name (defaults) |
+|----------|-----------------|
+| Resource group | `rg-fpl-assistant` |
+| Container Registry | `dominicacr` (shared; not app-specific) |
+| Log Analytics + Container Apps env | `fpl-assistant-env` |
+| PostgreSQL 16 Flexible Server (Burstable B1ms) | `fpl-assistant-pg` |
+| Key Vault secrets | `moonshot-api-key`, `auth-secret`, `auth-google-id`, `auth-google-secret`, `database-url` |
+| User-assigned identity | ACR pull + Key Vault get |
+| Container App | public HTTPS, min 0 / max 2 replicas, port 3000 |
+| Firewall | Azure services + your current public IP |
+| Migrations | runs `pnpm db:migrate` |
+
+Save the printed app URL and DB password.
+
+### Manual step-by-step (same outcome)
+
+If you prefer not to use the script, see the commands inside [`scripts/azure/provision.sh`](scripts/azure/provision.sh). The mapping from the old GCP stack is:
+
+| Was (GCP) | Now (Azure) |
+|-----------|-------------|
+| Cloud Run | Azure Container Apps |
+| Artifact Registry | Azure Container Registry |
+| Cloud SQL Postgres | Azure Database for PostgreSQL Flexible Server |
+| Secret Manager | Azure Key Vault |
+| Cloud SQL Auth Proxy | Firewall allow-list + `sslmode=require` |
+| WIF → `github-deployer` | Entra app + federated credential (OIDC) |
+
+## 2. Local development against Azure Postgres
 
 ```bash
-# terminal 1
-pnpm db:proxy
+# refresh firewall rule when your IP changes
+pnpm db:allow-ip
 
 # .env.local
-DATABASE_URL=postgresql://fpl_assistant:CHOOSE_A_STRONG_PASSWORD@127.0.0.1:5432/fpl_assistant
+DATABASE_URL=postgresql://fpl_assistant:YOUR_DB_PASSWORD@fpl-assistant-pg.postgres.database.azure.com:5432/fpl_assistant?sslmode=require
 
-# terminal 2 — migrate once against the shared DB
-pnpm db:migrate
+pnpm db:migrate   # when schema changes
 pnpm dev
 ```
 
-Local and Cloud Run then read/write the same users, approvals, and chat history.
+`sslmode=require` is mandatory for Flexible Server.
 
-## 5. Build locally and push
+## 3. Google OAuth for production
 
-Cloud Run needs **`linux/amd64`**. On Apple Silicon, always pass `--platform linux/amd64` or the revision will fail with a manifest/architecture error.
-
-```bash
-docker build --platform linux/amd64 -t "$IMAGE" .
-docker push "$IMAGE"
-```
-
-`.dockerignore` excludes `node_modules`, `.next`, `.env*`, etc. The image builds with pnpm inside the Dockerfile.
-
-### Alternative: Cloud Build
-
-```bash
-gcloud builds submit --tag "$IMAGE"
-```
-
-If that returns `PERMISSION_DENIED`, use the local Docker path above (what worked for this project).
-
-## 6. Deploy to Cloud Run
-
-First deploy (creates the service):
-
-```bash
-ADMIN_EMAILS=$(get_env ADMIN_EMAILS)
-KIMI_MODEL=$(get_env KIMI_MODEL)
-KIMI_MODEL=${KIMI_MODEL:-kimi-k3}
-
-gcloud run deploy "$SERVICE" \
-  --image="$IMAGE" \
-  --region="$REGION" \
-  --platform=managed \
-  --allow-unauthenticated \
-  --min-instances=0 \
-  --max-instances=2 \
-  --cpu=1 \
-  --memory=1Gi \
-  --timeout=60 \
-  --add-cloudsql-instances="${PROJECT_ID}:${REGION}:${DB_INSTANCE}" \
-  --set-env-vars="AUTH_TRUST_HOST=true,ADMIN_EMAILS=${ADMIN_EMAILS},KIMI_MODEL=${KIMI_MODEL}" \
-  --set-secrets="MOONSHOT_API_KEY=MOONSHOT_API_KEY:latest,AUTH_SECRET=AUTH_SECRET:latest,AUTH_GOOGLE_ID=AUTH_GOOGLE_ID:latest,AUTH_GOOGLE_SECRET=AUTH_GOOGLE_SECRET:latest,DATABASE_URL=DATABASE_URL:latest"
-```
-
-Notes:
-
-- `--allow-unauthenticated` = public HTTPS URL. Sign-in is still enforced by Auth.js; new accounts remain pending until an administrator approves them.
-- `min-instances=0` = scale to zero when idle (request-based billing).
-
-Get the URL:
-
-```bash
-gcloud run services describe "$SERVICE" --region="$REGION" --format='value(status.url)'
-# e.g. https://fpl-assistant-jimwsgdi4a-as.a.run.app
-```
-
-### Set AUTH_URL
-
-Cloud Run listens on `0.0.0.0`; without `AUTH_URL`, Auth.js may redirect to `https://0.0.0.0:8080/...`. Set it to the real service URL:
-
-```bash
-RUN_URL=$(gcloud run services describe "$SERVICE" --region="$REGION" --format='value(status.url)')
-
-gcloud run services update "$SERVICE" \
-  --region="$REGION" \
-  --update-env-vars="AUTH_URL=${RUN_URL},AUTH_TRUST_HOST=true"
-```
-
-## 7. Google OAuth for production
-
-In [APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials) → your OAuth 2.0 Web client:
+In [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials) → your OAuth 2.0 Web client (OAuth can stay on Google; only hosting moves):
 
 - **Authorized JavaScript origins:**
-  - `https://YOUR-SERVICE-xxxxx.run.app`
-  - `https://fplassistant.app` (custom domain)
+  - `https://<container-app-fqdn>`
+  - `https://fplassistant.app` (if you attach a custom domain)
+  - `http://localhost:3000`
 - **Authorized redirect URIs:**
-  - `https://YOUR-SERVICE-xxxxx.run.app/api/auth/callback/google`
+  - `https://<container-app-fqdn>/api/auth/callback/google`
   - `https://fplassistant.app/api/auth/callback/google`
+  - `http://localhost:3000/api/auth/callback/google`
 
-Also set Cloud Run `AUTH_URL` to the public site users open (prefer the custom domain):
-
-```bash
-gcloud run services update "$SERVICE" \
-  --region="$REGION" \
-  --update-env-vars="AUTH_URL=https://fplassistant.app,AUTH_TRUST_HOST=true,ADMIN_EMAILS=leungcheuk209@gmail.com"
-```
-
-Keep `http://localhost:3000` entries for local dev. OAuth console changes apply immediately (no redeploy); `AUTH_URL` / env changes need a Cloud Run update.
-
-## 8. Redeploy after code changes
-
-Preferred: merge to `main` and let GitHub Actions build/push/deploy (see [CI/CD](#8-cicd-github-actions--cloud-run) below).
-
-Manual fallback:
+Set Container App `AUTH_URL` to the URL users open (script sets the default FQDN; update if you add a custom domain):
 
 ```bash
-docker build --platform linux/amd64 -t "$IMAGE" .
-docker push "$IMAGE"
-gcloud run deploy "$SERVICE" \
-  --image="$IMAGE" \
-  --region="$REGION"
+az containerapp update \
+  --name "$APP_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --set-env-vars "AUTH_URL=https://fplassistant.app"
 ```
 
-Env and secrets persist unless you pass `--set-env-vars` / `--set-secrets` again.
+## 4. Redeploy after code changes
+
+### CI (preferred)
+
+```bash
+./scripts/azure/setup-github-oidc.sh
+```
+
+Add GitHub **Environment** `production` secrets:
+
+| Secret | Value |
+|--------|--------|
+| `AZURE_CLIENT_ID` | App (client) ID printed by the script |
+| `AZURE_TENANT_ID` | Directory (tenant) ID |
+| `AZURE_SUBSCRIPTION_ID` | Subscription ID |
+
+Pushing to `main` runs [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml): tests → build/push ACR → Container Apps update → smoke `/signin`.
+
+### Manual
+
+```bash
+./scripts/azure/deploy.sh
+```
 
 ### Update a secret later
 
 ```bash
-printf '%s' "$NEW_VALUE" | gcloud secrets versions add MOONSHOT_API_KEY --data-file=-
-# Cloud Run picks up :latest on new revisions; force a no-op deploy if needed:
-gcloud run services update "$SERVICE" --region="$REGION" --update-secrets=MOONSHOT_API_KEY=MOONSHOT_API_KEY:latest
+printf '%s' "$NEW_VALUE" | az keyvault secret set \
+  --vault-name "$KEY_VAULT" \
+  --name moonshot-api-key \
+  --file /dev/stdin
+
+# Force a new revision so the app reloads Key Vault refs if needed
+az containerapp revision restart \
+  --name "$APP_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --revision "$(az containerapp revision list -n "$APP_NAME" -g "$RESOURCE_GROUP" --query '[0].name' -o tsv)"
 ```
 
-## 8. CI/CD (GitHub Actions → Cloud Run)
+## 5. Optional: copy data from Cloud SQL → Azure
 
-Workflow: [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
-
-On every push to `main` (and manual `workflow_dispatch`), it:
-
-1. Runs typecheck + tests
-2. Authenticates to GCP via Workload Identity Federation (no JSON key)
-3. Builds a `linux/amd64` image and pushes `:sha` + `:latest` to Artifact Registry
-4. Deploys that image to Cloud Run so the service runs the new revision
-5. Smoke-checks `/signin`
-
-### One-time GCP setup for GitHub Actions
+Only if you need existing users/threads before deleting GCP:
 
 ```bash
-export PROJECT_ID=openclaw-dominic-209
-export REGION=asia-southeast1
-export SERVICE=fpl-assistant
-export GITHUB_REPO=dominic-lcw/fpl-assistant   # owner/repo
-export DEPLOY_SA=github-deployer
+# terminal A — old Cloud SQL
+cloud-sql-proxy openclaw-dominic-209:asia-southeast1:fpl-assistant-db --port 5433
 
-gcloud config set project "$PROJECT_ID"
-PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
-RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+# dump
+pg_dump "postgresql://fpl_assistant:OLD_PASSWORD@127.0.0.1:5433/fpl_assistant" \
+  --no-owner --no-acl -Fc -f fpl.dump
 
-# Deployer service account (no key; impersonated by GitHub via WIF)
-gcloud iam service-accounts create "$DEPLOY_SA" \
-  --display-name="GitHub Actions Cloud Run deployer" || true
-
-gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-  --member="serviceAccount:${DEPLOY_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
-  --role="roles/run.admin"
-
-gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-  --member="serviceAccount:${DEPLOY_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
-  --role="roles/artifactregistry.writer"
-
-gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_SA" \
-  --member="serviceAccount:${DEPLOY_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
-  --role="roles/iam.serviceAccountUser"
-
-# Workload Identity pool + GitHub OIDC provider
-gcloud iam workload-identity-pools create github \
-  --location=global \
-  --display-name="GitHub Actions" || true
-
-gcloud iam workload-identity-pools providers create-oidc github \
-  --location=global \
-  --workload-identity-pool=github \
-  --display-name="GitHub" \
-  --issuer-uri="https://token.actions.githubusercontent.com" \
-  --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository,attribute.ref=assertion.ref" \
-  --attribute-condition="assertion.repository=='${GITHUB_REPO}'" || true
-
-gcloud iam service-accounts add-iam-policy-binding \
-  "${DEPLOY_SA}@${PROJECT_ID}.iam.gserviceaccount.com" \
-  --role="roles/iam.workloadIdentityUser" \
-  --member="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/github/attribute.repository/${GITHUB_REPO}"
-
-echo "WIF provider resource name:"
-gcloud iam workload-identity-pools providers describe github \
-  --location=global \
-  --workload-identity-pool=github \
-  --format='value(name)'
+# restore into Azure (firewall must allow your IP)
+pg_restore --clean --if-exists --no-owner --no-acl \
+  -d "postgresql://fpl_assistant:NEW_PASSWORD@fpl-assistant-pg.postgres.database.azure.com:5432/fpl_assistant?sslmode=require" \
+  fpl.dump
 ```
 
-### GitHub repository configuration
+If you start fresh on Azure, skip this and keep `pnpm db:migrate` only.
 
-1. Create a GitHub Environment named **`production`** (Settings → Environments).
-2. Add repository (or environment) secrets:
+## 6. Custom domain (optional)
 
-| Secret | Value |
-|--------|--------|
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | Full provider resource name from the `describe` command above |
-| `GCP_SERVICE_ACCOUNT` | `github-deployer@openclaw-dominic-209.iam.gserviceaccount.com` |
+```bash
+az containerapp hostname add \
+  --name "$APP_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --hostname fplassistant.app
+# follow DNS TXT/CNAME validation, then bind a managed certificate
+az containerapp hostname bind \
+  --name "$APP_NAME" \
+  --resource-group "$RESOURCE_GROUP" \
+  --hostname fplassistant.app \
+  --validation-method CNAME
+```
 
-Optional: add required reviewers on the `production` environment if you want a human gate before deploy.
+Update `AUTH_URL` + Google OAuth as in §3.
 
 ## Smoke checks
 
 ```bash
-RUN_URL=$(gcloud run services describe "$SERVICE" --region="$REGION" --format='value(status.url)')
-curl -sI "$RUN_URL/signin" | head
-# Expect HTTP 200, cookies for authjs
+APP_FQDN=$(az containerapp show -n "$APP_NAME" -g "$RESOURCE_GROUP" \
+  --query properties.configuration.ingress.fqdn -o tsv)
+curl -sI "https://${APP_FQDN}/signin" | head
 ```
 
-Open the URL, sign in with an address in `ADMIN_EMAILS`, approve a requested account at `/admin`, enter an FPL manager ID, and try a chat turn.
-
-## Current production pointers
-
-| Item | Value |
-|------|--------|
-| Project | `openclaw-dominic-209` |
-| Region | `asia-southeast1` |
-| Service | `fpl-assistant` |
-| Image | `asia-southeast1-docker.pkg.dev/openclaw-dominic-209/fpl-assistant/fpl-assistant:latest` |
-| URL | https://fpl-assistant-jimwsgdi4a-as.a.run.app |
-
-Custom domain (`fplassistant.app`) work is tracked separately under `todos/` (gitignored), not required for the Run URL above.
+Sign in with an `ADMIN_EMAILS` account, approve users at `/admin`, try a chat turn.
 
 ## Cost (personal use)
 
-- Cloud Run: request-based + `min-instances=0` → idle ≈ $0; free tier applies in many regions
-- Artifact Registry: small image storage usually free or cents
-- Secret Manager: negligible at this scale
-- Moonshot / Kimi API: billed separately (main ongoing cost)
+- **Container Apps** Consumption: `min-replicas=0` → idle ≈ $0
+- **ACR Basic**: small monthly fee for the registry
+- **PostgreSQL Flexible Burstable B1ms**: always-on (main fixed cost; stop/start the server if you want to pause)
+- **Key Vault / Log Analytics**: usually cents at this scale
+- **Moonshot / Kimi API**: billed separately (main variable cost)
 - Google OAuth: free
+
+---
+
+## Remove the GCP deployment (after Azure cutover)
+
+Do this only when the Azure URL works (sign-in, chat, admin) and you have migrated or accepted losing Cloud SQL data.
+
+### Checklist
+
+1. **Verify Azure** — smoke `/signin`, Google OAuth, migrate/restore DB if needed, update DNS/`AUTH_URL` if using `fplassistant.app`.
+2. **Update Google OAuth** — add Azure origins/redirects; remove `*.run.app` entries once unused.
+3. **Export Cloud SQL** (optional) — `pg_dump` via Auth Proxy if you still need a backup.
+4. **Run teardown script** (interactive; type `YES`):
+
+```bash
+export PROJECT_ID=openclaw-dominic-209
+export REGION=asia-southeast1
+./scripts/gcp/teardown.sh
+```
+
+Deletes: Cloud Run service, Artifact Registry repo, Cloud SQL instance, app secrets, WIF pool, `github-deployer` SA.
+
+5. **GitHub** — Environment `production`: delete `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT` (keep `AZURE_*`).
+6. **Billing** — if the GCP project is empty, disable billing or delete the project in Cloud Console.
+7. **Local tooling** — you can uninstall `cloud-sql-proxy` / stop using `gcloud` for this app; local DB access is `pnpm db:allow-ip` + Azure `DATABASE_URL`.
+
+### Manual gcloud equivalents
+
+```bash
+gcloud config set project openclaw-dominic-209
+gcloud run services delete fpl-assistant --region=asia-southeast1 --quiet
+gcloud artifacts repositories delete fpl-assistant --location=asia-southeast1 --quiet
+gcloud sql instances delete fpl-assistant-db --quiet
+for S in MOONSHOT_API_KEY AUTH_SECRET AUTH_GOOGLE_ID AUTH_GOOGLE_SECRET DATABASE_URL; do
+  gcloud secrets delete "$S" --quiet
+done
+```

@@ -1,10 +1,17 @@
-import { DuckDBInstance } from "@duckdb/node-api";
-
 import {
   computeBeliefScoreDelta,
   type PlayerBeliefAdjustment,
 } from "./beliefs";
 import type { BootstrapStatic, Fixture } from "./types";
+
+/**
+ * Load DuckDB only when analysis runs. A static import would pull the native
+ * addon (and sibling libduckdb.so) into every `/api/chat` module load.
+ */
+async function loadDuckDBInstance() {
+  const { DuckDBInstance } = await import("@duckdb/node-api");
+  return DuckDBInstance;
+}
 
 const DATABASE_OPTIONS = {
   allow_community_extensions: "false",
@@ -67,6 +74,7 @@ export async function runFplAnalysis({
   sql,
   rowLimit = 200,
 }: AnalysisInput) {
+  const DuckDBInstance = await loadDuckDBInstance();
   const instance = await DuckDBInstance.create(":memory:", DATABASE_OPTIONS);
   const connection = await instance.connect();
   const teams = new Map(bootstrap.teams.map((team) => [team.id, team]));

@@ -13,6 +13,7 @@ type RemoteThread = {
   id: string;
   title: string | null;
   status: "regular" | "archived";
+  updatedAt: string;
 };
 
 async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
@@ -32,6 +33,7 @@ export const threadListAdapter: RemoteThreadListAdapter = {
         remoteId: thread.id,
         status: thread.status,
         title: thread.title ?? undefined,
+        lastMessageAt: new Date(thread.updatedAt),
       })),
     };
   },
@@ -68,6 +70,7 @@ export const threadListAdapter: RemoteThreadListAdapter = {
       remoteId: thread.id,
       status: thread.status,
       title: thread.title ?? undefined,
+      lastMessageAt: new Date(thread.updatedAt),
     };
   },
   async generateTitle(remoteId, messages) {

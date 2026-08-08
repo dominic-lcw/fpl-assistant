@@ -7,11 +7,14 @@ import {
 } from "@assistant-ui/react";
 import {
   ArchiveIcon,
+  ArchiveRestoreIcon,
   MenuIcon,
   MessageSquarePlusIcon,
   Trash2Icon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuiState } from "@assistant-ui/react";
+import { formatThreadUpdatedAt } from "@/lib/threads/retention";
 import {
   Dialog,
   DialogContent,
@@ -74,30 +77,65 @@ function ThreadListContent({ onSelect }: { onSelect?: () => void }) {
       </ThreadListPrimitive.New>
       <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
         <ThreadListPrimitive.Items>
-          {() => (
-            <ThreadListItemPrimitive.Root
-              onClick={onSelect}
-              className="group hover:bg-muted flex items-center gap-1 rounded-lg p-1"
-            >
-              <ThreadListItemPrimitive.Trigger className="text-foreground min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-left text-sm">
-                <ThreadListItemPrimitive.Title fallback="New conversation" />
-              </ThreadListItemPrimitive.Trigger>
-              <ThreadListItemPrimitive.Archive
-                aria-label="Archive conversation"
-                className="text-muted-foreground hover:text-foreground hidden size-7 items-center justify-center rounded-md group-hover:flex"
-              >
-                <ArchiveIcon className="size-3.5" />
-              </ThreadListItemPrimitive.Archive>
-              <ThreadListItemPrimitive.Delete
-                aria-label="Delete conversation"
-                className="text-muted-foreground hover:text-destructive hidden size-7 items-center justify-center rounded-md group-hover:flex"
-              >
-                <Trash2Icon className="size-3.5" />
-              </ThreadListItemPrimitive.Delete>
-            </ThreadListItemPrimitive.Root>
-          )}
+          {() => <ThreadListItem onSelect={onSelect} />}
+        </ThreadListPrimitive.Items>
+        <ThreadListPrimitive.Items archived>
+          {() => <ThreadListItem onSelect={onSelect} archived />}
         </ThreadListPrimitive.Items>
       </div>
     </>
+  );
+}
+
+function ThreadListItem({
+  archived = false,
+  onSelect,
+}: {
+  archived?: boolean;
+  onSelect?: () => void;
+}) {
+  const lastMessageAt = useAuiState((s) => s.threadListItem.lastMessageAt);
+
+  return (
+    <ThreadListItemPrimitive.Root
+      onClick={onSelect}
+      className="group hover:bg-muted flex items-center gap-1 rounded-lg p-1"
+    >
+      <ThreadListItemPrimitive.Trigger className="text-foreground min-w-0 flex-1 rounded-md px-2 py-1.5 text-left text-sm">
+        <span className="block truncate">
+          <ThreadListItemPrimitive.Title fallback="New conversation" />
+        </span>
+        {lastMessageAt && (
+          <time
+            dateTime={lastMessageAt.toISOString()}
+            title={`Last updated ${lastMessageAt.toLocaleString()}`}
+            className="text-muted-foreground mt-0.5 block text-xs"
+          >
+            {formatThreadUpdatedAt(lastMessageAt)}
+          </time>
+        )}
+      </ThreadListItemPrimitive.Trigger>
+      {archived ? (
+        <ThreadListItemPrimitive.Unarchive
+          aria-label="Restore conversation"
+          className="text-muted-foreground hover:text-foreground hidden size-7 items-center justify-center rounded-md group-hover:flex"
+        >
+          <ArchiveRestoreIcon className="size-3.5" />
+        </ThreadListItemPrimitive.Unarchive>
+      ) : (
+        <ThreadListItemPrimitive.Archive
+          aria-label="Archive conversation"
+          className="text-muted-foreground hover:text-foreground hidden size-7 items-center justify-center rounded-md group-hover:flex"
+        >
+          <ArchiveIcon className="size-3.5" />
+        </ThreadListItemPrimitive.Archive>
+      )}
+      <ThreadListItemPrimitive.Delete
+        aria-label="Delete conversation"
+        className="text-muted-foreground hover:text-destructive hidden size-7 items-center justify-center rounded-md group-hover:flex"
+      >
+        <Trash2Icon className="size-3.5" />
+      </ThreadListItemPrimitive.Delete>
+    </ThreadListItemPrimitive.Root>
   );
 }

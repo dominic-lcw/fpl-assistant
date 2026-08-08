@@ -20,7 +20,8 @@ const bootstrap: BootstrapStatic = {
       id: 1,
       name: "Alpha",
       short_name: "ALP",
-      strength: 3,
+      // Preseason bootstrap often ships null overall strength.
+      strength: null,
       strength_attack_home: 3,
       strength_attack_away: 3,
       strength_defence_home: 3,
@@ -30,7 +31,7 @@ const bootstrap: BootstrapStatic = {
       id: 2,
       name: "Beta",
       short_name: "BET",
-      strength: 3,
+      strength: null,
       strength_attack_home: 3,
       strength_attack_away: 3,
       strength_defence_home: 3,
@@ -118,6 +119,29 @@ const fixtures: Fixture[] = [
 ];
 
 describe("runFplAnalysis", () => {
+  it("loads preseason null team strength without failing", async () => {
+    const result = await runFplAnalysis({
+      bootstrap,
+      fixtures,
+      sql: `SELECT id, strength FROM teams ORDER BY id`,
+    });
+
+    expect(result.rows).toEqual([
+      { id: 1, strength: null },
+      { id: 2, strength: null },
+    ]);
+  });
+
+  it("runs the tool example average-form query", async () => {
+    const result = await runFplAnalysis({
+      bootstrap,
+      fixtures,
+      sql: `SELECT position, AVG(form) AS average_form FROM players GROUP BY position ORDER BY average_form DESC`,
+    });
+
+    expect(result.rows).toEqual([{ position: "GKP", average_form: 4.5 }]);
+  });
+
   it("supports a fixture-difficulty ranking joined back to goalkeepers", async () => {
     const result = await runFplAnalysis({
       bootstrap,
